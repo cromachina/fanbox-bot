@@ -1,0 +1,57 @@
+# Bot access token for discord
+discord_token: <DISCORD_BOT_TOKEN>
+
+# ID of the user to use admin commands
+admin_id: <DISCORD_ADMIN_ID>
+
+# File to log system information to
+log_file: log.txt
+
+# Number of seconds to wait between processing a user's message. Spam protection
+rate_limit: 60
+
+# Select if we are in key mode or plan mode for access check.
+key_mode: False
+
+# Add keys and their associated roles IDs here
+key_roles:
+  PASSWORD123: <ROLL_ID>
+
+# Add plans IDs and their associated role IDs here
+plan_roles:
+  '12345': <ROLL_ID>
+
+# Clear all of the user's plan roles before applying a new role
+clear_roles: False
+
+# Messages to return to the user for each condition
+system_messages:
+  rate_limited: "Rate limited, please wait {rate_limit} seconds.\nレートが制限されていますので、{rate_limit}秒お待ちください。"
+  not_member: "Cannot grant access as you are not in the server.\nサーバーに参加していないため、アクセスを付与できません。"
+  no_id_found: "Cannot detect a user ID in your message.\nメッセージ内のユーザーIDを検出できません。"
+  access_denied: "Access denied.\nアクセスが拒否されました。"
+  access_granted: "Access granted. Please check the server for new channels!\nアクセスが許可されました。新しいチャンネルがないか、サーバーをチェックしてみてください！"
+  system_error: "An error has occurred! The admin has been notified to fix it.\nエラーが発生しました！管理者が修正するように通知されています。"
+
+# Update these with cookies from your FANBOX page. Needed to contact the FANBOX API
+session_cookies:
+  p_ab_id: '2'
+  p_ab_id_2: '5'
+  p_ab_id_id: <P_AB_ID_ID>
+  privacy_policy_notification: '0'
+  privacy_policy_agreement: '3'
+  FANBOXSESSID: <FANBOX_SESSION_ID>
+
+# Do not change unless you know what you are doing. Needed to contact the FANBOX API
+session_headers:
+  accept: application/json, text/plain, */*
+  accept-language: en-US,en;q=0.9,ja;q=0.8
+  sec-ch-ua: '" Not;A Brand";v="99", "Google Chrome";v="91", "Chromium";v="91"'
+  sec-ch-ua-mobile: "?0"
+  sec-fetch-dest: empty
+  sec-fetch-mode: cors
+  sec-fetch-site: same-site
+  referer: https://www.fanbox.cc/
+  referrerPolicy: strict-origin-when-cross-origin
+  origin: https://www.fanbox.cc
+  user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36
