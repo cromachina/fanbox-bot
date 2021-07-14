@@ -1,4 +1,5 @@
+*.swp
+__pycache__
+config.yml
 log.txt
 registry.dat
-__pycache__
-*.swp
