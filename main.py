@@ -11,7 +11,7 @@ import yaml
 
 config_file = 'config.yml'
 registry_file = 'registry.dat'
-id_prog = re.compile('(\d+)/*$')
+id_prog = re.compile('(\d+)')
 
 class obj:
     def __init__(self, d):
