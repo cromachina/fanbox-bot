@@ -163,17 +163,17 @@ def main():
         if not config.key_mode:
             discord_ids, pixiv_ids = update_registry(member.id, key)
             if discord_ids and len(discord_ids) > 1:
-                logging.warn('Pixiv ID {key} has multiple registered users:')
+                logging.warning(f'Pixiv ID {key} has multiple registered users:')
                 for discord_id in discord_ids:
                     try:
                         user = await client.fetch_user(discord_id)
-                        logging.warn(f'    {user}')
+                        logging.warning(f'    {user}')
                     except:
-                        logging.warn(f'    {discord_id} (No user found)')
+                        logging.warning(f'    {discord_id} (No user found)')
             if pixiv_ids and len(pixiv_ids) > 1:
-                logging.warn(f'User {member} has multiple registered pixiv IDs:')
+                logging.warning(f'User {member} has multiple registered pixiv IDs:')
                 for pixiv_id in pixiv_ids:
-                    logging.warn(f'    {pixiv_id}')
+                    logging.warning(f'    {pixiv_id}')
 
     async def handle_admin(message):
         await message.channel.send('admin')
