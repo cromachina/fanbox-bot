@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -90,6 +91,10 @@ def save_registry(registry):
     with open(registry_file, 'wb') as f:
         pickle.dump(registry, f)
 
+def delete_registry():
+    if os.path.isfile(registry_file):
+        os.remove(registry_file)
+
 def append_field(table, field_id, set_id):
     data = table.get(field_id, set())
     data.add(set_id)
@@ -107,6 +112,7 @@ def main():
     setup_logging(config.log_file)
     rate_limit_table = {}
     client = discord.Client()
+    lock = asyncio.Lock()
 
     async def discord_id_to_name(id):
         await client.fetch_user(id)
@@ -150,33 +156,44 @@ def main():
                 await respond(message, 'access_denied')
                 return
 
-            if config.clear_roles:
-                await member.remove_roles(*config.all_roles)
+            async with lock:
+                if config.clear_roles:
+                    await member.remove_roles(*config.all_roles)
 
-            await member.add_roles(role)
+                await member.add_roles(role)
+                if not config.key_mode:
+                    discord_ids, pixiv_ids = update_registry(member.id, key)
+                    if discord_ids and len(discord_ids) > 1:
+                        logging.warning(f'Pixiv ID {key} has multiple registered users:')
+                        for discord_id in discord_ids:
+                            try:
+                                user = await client.fetch_user(discord_id)
+                                logging.warning(f'    {user}')
+                            except:
+                                logging.warning(f'    {discord_id} (No user found)')
+                    if pixiv_ids and len(pixiv_ids) > 1:
+                        logging.warning(f'User {member} has multiple registered pixiv IDs:')
+                        for pixiv_id in pixiv_ids:
+                            logging.warning(f'    {pixiv_id}')
+
             await respond(message, 'access_granted')
 
         except Exception as ex:
             logging.error(ex)
             await respond(message, 'system_error')
 
-        if not config.key_mode:
-            discord_ids, pixiv_ids = update_registry(member.id, key)
-            if discord_ids and len(discord_ids) > 1:
-                logging.warning(f'Pixiv ID {key} has multiple registered users:')
-                for discord_id in discord_ids:
-                    try:
-                        user = await client.fetch_user(discord_id)
-                        logging.warning(f'    {user}')
-                    except:
-                        logging.warning(f'    {discord_id} (No user found)')
-            if pixiv_ids and len(pixiv_ids) > 1:
-                logging.warning(f'User {member} has multiple registered pixiv IDs:')
-                for pixiv_id in pixiv_ids:
-                    logging.warning(f'    {pixiv_id}')
-
     async def handle_admin(message):
-        await message.channel.send('admin')
+        if (message.content.endswith('reset')):
+            async with lock:
+                guild = client.guilds[0]
+                count = 0
+                async for member in guild.fetch_members(limit=None):
+                    await member.remove_roles(*config.all_roles)
+                    count += 1
+                delete_registry()
+                await message.channel.send(f'removed {count} roles')
+        else:
+            await message.channel.send('unknown command')
 
     @client.event
     async def on_ready():
