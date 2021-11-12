@@ -131,10 +131,6 @@ def main(operator_mode):
         key = None
 
         try:
-            if update_rate_limited(message.author.id, config.rate_limit, rate_limit_table):
-                await respond(message, 'rate_limited', rate_limit=config.rate_limit)
-                return
-
             guild = client.guilds[0]
             try:
                 member = await guild.fetch_member(message.author.id)
@@ -142,7 +138,12 @@ def main(operator_mode):
                 pass
 
             if not member:
-                await respond(message, 'not_member')
+                #await respond(message, 'not_member')
+                logging.info(f'User: {message.author}; Message: "{message.content}"; Not a member, ignored')
+                return
+
+            if update_rate_limited(message.author.id, config.rate_limit, rate_limit_table):
+                await respond(message, 'rate_limited', rate_limit=config.rate_limit)
                 return
 
             key = message.content
