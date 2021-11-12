@@ -1,3 +1,4 @@
+import argparse
 import asyncio
 import json
 import logging
@@ -7,6 +8,7 @@ import re
 import time
 
 import discord
+from discord.flags import Intents
 import requests
 import yaml
 
@@ -73,7 +75,7 @@ def setup_logging(log_file):
     discord_logger = logging.getLogger('discord')
     discord_logger.setLevel(logging.WARNING)
 
-def load_config():
+def load_config(config_file):
     with open(config_file, 'r', encoding='utf-8') as f:
         config = obj(yaml.load(f, Loader=yaml.Loader))
         config.key_roles = make_roles_objects(config.key_roles)
@@ -107,11 +109,13 @@ def update_registry(discord_id, pixiv_id):
     save_registry(registry)
     return (registry['pixiv_ids'].get(pixiv_id), registry['discord_ids'].get(discord_id))
 
-def main():
-    config = load_config()
+def main(operator_mode):
+    config = load_config(config_file)
     setup_logging(config.log_file)
     rate_limit_table = {}
-    client = discord.Client()
+    intents = discord.Intents.default()
+    intents.members = True
+    client = discord.Client(intents=intents)
     lock = asyncio.Lock()
 
     async def discord_id_to_name(id):
@@ -183,7 +187,7 @@ def main():
             await respond(message, 'system_error')
 
     async def handle_admin(message):
-        if (message.content.endswith('reset')):
+        if message.content.endswith('reset'):
             async with lock:
                 guild = client.guilds[0]
                 count = 0
@@ -191,7 +195,18 @@ def main():
                     await member.remove_roles(*config.all_roles)
                     count += 1
                 delete_registry()
-                await message.channel.send(f'removed {count} roles')
+                await message.channel.send(f'removed roles from {count} users')
+        elif message.content.endswith('purge'):
+            async with lock:
+                guild = client.guilds[0]
+                count = 0
+                names = []
+                async for member in guild.fetch_members(limit=None):
+                    if len(member.roles) == 1:
+                        await member.kick(reason="Purge: No role assigned")
+                        names.append(member.name)
+                        count += 1
+                await message.channel.send(f'purged {count} users without roles: {names}')
         else:
             await message.channel.send('unknown command')
 
@@ -208,10 +223,14 @@ def main():
 
         if (message.author.id == config.admin_id and message.content.startswith('!')):
             await handle_admin(message)
-        else:
+        elif not operator_mode:
             await handle_access(message)
 
-    client.run(config.discord_token)
+    token = config.operator_token if operator_mode else config.discord_token
+    client.run(token)
 
 if __name__ == '__main__':
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--operator', action='store_true')
+    args = parser.parse_args()
+    main(args.operator)

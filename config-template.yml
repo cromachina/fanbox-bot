@@ -1,6 +1,9 @@
 # Bot access token for discord
 discord_token: <DISCORD_BOT_TOKEN>
 
+# This is for testing out commands with another bot
+operator_token: <DISCORD_OPERATOR_BOT_TOKEN>
+
 # ID of the user to use admin commands
 admin_id: <DISCORD_ADMIN_ID>
 
