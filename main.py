@@ -130,62 +130,57 @@ def main(operator_mode):
         member = None
         key = None
 
+        guild = client.guilds[0]
         try:
-            guild = client.guilds[0]
-            try:
-                member = await guild.fetch_member(message.author.id)
-            except:
-                pass
+            member = await guild.fetch_member(message.author.id)
+        except:
+            pass
 
-            if not member:
-                #await respond(message, 'not_member')
-                logging.info(f'User: {message.author}; Message: "{message.content}"; Not a member, ignored')
+        if not member:
+            #await respond(message, 'not_member')
+            logging.info(f'User: {message.author}; Message: "{message.content}"; Not a member, ignored')
+            return
+
+        if update_rate_limited(message.author.id, config.rate_limit, rate_limit_table):
+            await respond(message, 'rate_limited', rate_limit=config.rate_limit)
+            return
+
+        key = message.content
+
+        if not config.key_mode:
+            key = get_id(message.content)
+
+            if not key:
+                await respond(message, 'no_id_found')
                 return
 
-            if update_rate_limited(message.author.id, config.rate_limit, rate_limit_table):
-                await respond(message, 'rate_limited', rate_limit=config.rate_limit)
-                return
+        role = get_role_with_key(config, key)
 
-            key = message.content
+        if not role:
+            await respond(message, 'access_denied')
+            return
 
+        async with lock:
+            if config.clear_roles:
+                await member.remove_roles(*config.all_roles)
+
+            await member.add_roles(role)
             if not config.key_mode:
-                key = get_id(message.content)
+                discord_ids, pixiv_ids = update_registry(member.id, key)
+                if discord_ids and len(discord_ids) > 1:
+                    logging.warning(f'Pixiv ID {key} has multiple registered users:')
+                    for discord_id in discord_ids:
+                        try:
+                            user = await client.fetch_user(discord_id)
+                            logging.warning(f'    {user}')
+                        except:
+                            logging.warning(f'    {discord_id} (No user found)')
+                if pixiv_ids and len(pixiv_ids) > 1:
+                    logging.warning(f'User {member} has multiple registered pixiv IDs:')
+                    for pixiv_id in pixiv_ids:
+                        logging.warning(f'    {pixiv_id}')
 
-                if not key:
-                    await respond(message, 'no_id_found')
-                    return
-
-            role = get_role_with_key(config, key)
-
-            if not role:
-                await respond(message, 'access_denied')
-                return
-
-            async with lock:
-                if config.clear_roles:
-                    await member.remove_roles(*config.all_roles)
-
-                await member.add_roles(role)
-                if not config.key_mode:
-                    discord_ids, pixiv_ids = update_registry(member.id, key)
-                    if discord_ids and len(discord_ids) > 1:
-                        logging.warning(f'Pixiv ID {key} has multiple registered users:')
-                        for discord_id in discord_ids:
-                            try:
-                                user = await client.fetch_user(discord_id)
-                                logging.warning(f'    {user}')
-                            except:
-                                logging.warning(f'    {discord_id} (No user found)')
-                    if pixiv_ids and len(pixiv_ids) > 1:
-                        logging.warning(f'User {member} has multiple registered pixiv IDs:')
-                        for pixiv_id in pixiv_ids:
-                            logging.warning(f'    {pixiv_id}')
-
-            await respond(message, 'access_granted')
-
-        except Exception as ex:
-            logging.error(ex)
-            await respond(message, 'system_error')
+        await respond(message, 'access_granted')
 
     async def handle_admin(message):
         if message.content.endswith('reset'):
@@ -222,10 +217,15 @@ def main(operator_mode):
             or message.content == ''):
             return
 
-        if (message.author.id == config.admin_id and message.content.startswith('!')):
-            await handle_admin(message)
-        elif not operator_mode:
-            await handle_access(message)
+        try:
+            if (message.author.id == config.admin_id and message.content.startswith('!')):
+                await handle_admin(message)
+            elif not operator_mode:
+                await handle_access(message)
+
+        except Exception as ex:
+            logging.exception(ex)
+            await respond(message, 'system_error')
 
     token = config.operator_token if operator_mode else config.discord_token
     client.run(token)
