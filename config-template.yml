@@ -27,8 +27,19 @@ plan_roles:
 # Clear all of the user's plan roles before applying a new role
 clear_roles: False
 
-# The fanbox post that contains the discord invite.
+# The fanbox post that contains the discord invite
 fanbox_discord_post_id: <POST_ID>
+
+# Periodic cleanup routines. Only runs after user activity
+cleanup:
+  # If we should even run cleanup routines at all
+  run: False
+  # Run only if it has been X hours since the last run
+  period_hours: 24
+  # Purge no-roll members older than X hours
+  member_age_hours: 24
+  # Update the fanbox invite post after a non-empty purge, otherwise do nothing
+  update_invite: True
 
 # Messages to return to the user for each condition
 system_messages:

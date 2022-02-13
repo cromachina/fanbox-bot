@@ -1,1 +1,1 @@
-pip install discord.py pyyaml requests
+pip install discord.py pyyaml httpx

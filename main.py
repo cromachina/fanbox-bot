@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import datetime
 import json
 import logging
 import os
@@ -8,9 +9,9 @@ import re
 import time
 
 import discord
-from discord.flags import Intents
-import requests
+import httpx
 import yaml
+from discord.flags import Intents
 
 config_file = 'config.yml'
 registry_file = 'registry.dat'
@@ -21,13 +22,28 @@ class obj:
         for k, v in d.items():
             setattr(self, k, v)
 
-def get_editable_post(cookies, headers, post_id):
-    r = requests.get('https://api.fanbox.cc/post.getEditable', cookies=cookies, headers=headers, params={'postId': post_id})
-    return json.loads(r.text)['body']
+def periodic(func, timeout):
+    async def run():
+        while True:
+            await asyncio.sleep(timeout)
+            await func()
+    return asyncio.create_task(run())
 
-def post_update(cookies, headers, data):
-    r = requests.post('https://api.fanbox.cc/post.update', cookies=cookies, headers=headers, data=data)
-    return json.loads(r.text)['body']
+def get_payload(response):
+    return json.loads(response.text)['body']
+
+class FanboxClient:
+    def __init__(self, cookies, headers) -> None:
+        self.client = httpx.AsyncClient(cookies=cookies, headers=headers)
+
+    async def get_editable_post(self, post_id):
+        return get_payload(await self.client.get('https://api.fanbox.cc/post.getEditable', params={'postId': post_id}))
+
+    async def post_update(self, data):
+        return get_payload(await self.client.post('https://api.fanbox.cc/post.update', data=data))
+
+    async def get_supporters(self):
+        return get_payload(await self.client.get('https://api.fanbox.cc/relationship.listFans?status=supporter'))
 
 def update_post_invite(post, discord_invite):
     post['body']['blocks'][-1]['text'] = discord_invite
@@ -41,10 +57,6 @@ def convert_post(post):
         , 'tags': json.dumps(post['tags'])
         , 'tt': 'a16cbb5611d546e8f4f509f9cbdf98b5' # IDK what this is, but it doesn't seem to change. A hash maybe?
     }
-
-def get_supporters(cookies, headers):
-    r = requests.get('https://api.fanbox.cc/relationship.listFans?status=supporter', cookies=cookies, headers=headers)
-    return json.loads(r.text)['body']
 
 def find_supporter(supporters, user_id):
     for supporter in supporters:
@@ -62,14 +74,6 @@ def get_role_from_supporter(supporter, plan_roles):
             if supporter['planId'] == plan:
                 return role
     return None
-
-def get_role_with_key(config, key):
-    if config.key_mode:
-        return config.key_roles.get(key)
-    else:
-        supporters = get_supporters(config.session_cookies, config.session_headers)
-        supporter = find_supporter(supporters, key)
-        return get_role_from_supporter(supporter, config.plan_roles)
 
 def update_rate_limited(user_id, rate_limit, rate_limit_table):
     now = time.time()
@@ -102,6 +106,7 @@ def load_config(config_file):
         config.key_roles = make_roles_objects(config.key_roles)
         config.plan_roles = make_roles_objects(config.plan_roles)
         config.all_roles = list(config.key_roles.values()) + list(config.plan_roles.values())
+        config.cleanup = obj(config.cleanup)
         return config
 
 def load_registry():
@@ -130,14 +135,33 @@ def update_registry(discord_id, pixiv_id):
     save_registry(registry)
     return (registry['pixiv_ids'].get(pixiv_id), registry['discord_ids'].get(discord_id))
 
-def main(operator_mode):
+async def main(operator_mode):
     config = load_config(config_file)
     setup_logging(config.log_file)
     rate_limit_table = {}
     intents = discord.Intents.default()
     intents.members = True
     client = discord.Client(intents=intents)
+    fanbox_client = FanboxClient(config.session_cookies, config.session_headers)
     lock = asyncio.Lock()
+
+    async def get_role_with_key(key):
+        if config.key_mode:
+            return config.key_roles.get(key)
+        else:
+            supporters = await fanbox_client.get_supporters()
+            supporter = find_supporter(supporters, key)
+            return get_role_from_supporter(supporter, config.plan_roles)
+
+    async def reset():
+        async with lock:
+            guild = client.guilds[0]
+            count = 0
+            async for member in guild.fetch_members(limit=None):
+                await member.remove_roles(*config.all_roles)
+                count += 1
+            delete_registry()
+            return count
 
     async def regen_invite():
         guild = client.guilds[0]
@@ -153,9 +177,33 @@ def main(operator_mode):
 
     async def regen_fanbox_invite_post():
         invite = await regen_invite()
-        fanbox_post = get_editable_post(config.session_cookies, config.session_headers, config.fanbox_discord_post_id)
+        fanbox_post = await fanbox_client.get_editable_post(config.fanbox_discord_post_id)
         update_post_invite(fanbox_post, invite.url)
-        post_update(config.session_cookies, config.session_headers, convert_post(fanbox_post))
+        await fanbox_client.post_update(convert_post(fanbox_post))
+        logging.info(f'invite regenerated: {invite.url}')
+
+    def is_old_member(joined_at):
+        return joined_at + datetime.timedelta(hours=config.cleanup.member_age_hours) <= datetime.datetime.now()
+
+    async def purge():
+        async with lock:
+            guild = client.guilds[0]
+            names = []
+            async for member in guild.fetch_members(limit=None):
+                if len(member.roles) == 1 and is_old_member(member.joined_at):
+                    await member.kick(reason="Purge: No role assigned")
+                    names.append(member.name)
+            if len(names) > 0:
+                logging.info(f'purged {len(names)} users without roles: {names}')
+            return names
+
+    async def cleanup():
+        try:
+            names = await purge()
+            if len(names) > 0 and config.cleanup.update_invite:
+                await regen_fanbox_invite_post()
+        except Exception as ex:
+            logging.exception(ex)
 
     async def respond(message, condition, **kwargs):
         logging.info(f'User: {message.author}; Message: "{message.content}"; Response: {condition}')
@@ -173,7 +221,6 @@ def main(operator_mode):
             pass
 
         if not member:
-            #await respond(message, 'not_member')
             logging.info(f'User: {message.author}; Message: "{message.content}"; Not a member, ignored')
             return
 
@@ -190,7 +237,7 @@ def main(operator_mode):
                 await respond(message, 'no_id_found')
                 return
 
-        role = get_role_with_key(config, key)
+        role = await get_role_with_key(key)
 
         if not role:
             await respond(message, 'access_denied')
@@ -220,25 +267,11 @@ def main(operator_mode):
 
     async def handle_admin(message):
         if message.content.endswith('reset'):
-            async with lock:
-                guild = client.guilds[0]
-                count = 0
-                async for member in guild.fetch_members(limit=None):
-                    await member.remove_roles(*config.all_roles)
-                    count += 1
-                delete_registry()
-                await message.channel.send(f'removed roles from {count} users')
+            count = await reset()
+            await message.channel.send(f'removed roles from {count} users')
         elif message.content.endswith('purge'):
-            async with lock:
-                guild = client.guilds[0]
-                count = 0
-                names = []
-                async for member in guild.fetch_members(limit=None):
-                    if len(member.roles) == 1:
-                        await member.kick(reason="Purge: No role assigned")
-                        names.append(member.name)
-                        count += 1
-                await message.channel.send(f'purged {count} users without roles: {names}')
+            names = await purge()
+            await message.channel.send(f'purged {len(names)} users without roles: {names}')
         elif message.content.endswith('regen-invite'):
             await regen_fanbox_invite_post()
             await message.channel.send(f'invite regenerated')
@@ -267,10 +300,14 @@ def main(operator_mode):
             await respond(message, 'system_error')
 
     token = config.operator_token if operator_mode else config.discord_token
-    client.run(token)
+
+    if config.cleanup.run:
+        periodic(cleanup, config.cleanup.period_hours * 60 * 60)
+
+    await client.start(token)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--operator', action='store_true')
     args = parser.parse_args()
-    main(args.operator)
+    asyncio.run(main(args.operator))
