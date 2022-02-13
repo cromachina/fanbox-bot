@@ -27,6 +27,9 @@ plan_roles:
 # Clear all of the user's plan roles before applying a new role
 clear_roles: False
 
+# The fanbox post that contains the discord invite.
+fanbox_discord_post_id: <POST_ID>
+
 # Messages to return to the user for each condition
 system_messages:
   rate_limited: "Rate limited, please wait {rate_limit} seconds.\nレートが制限されていますので、{rate_limit}秒お待ちください。"

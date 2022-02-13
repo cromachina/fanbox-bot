@@ -21,6 +21,27 @@ class obj:
         for k, v in d.items():
             setattr(self, k, v)
 
+def get_editable_post(cookies, headers, post_id):
+    r = requests.get('https://api.fanbox.cc/post.getEditable', cookies=cookies, headers=headers, params={'postId': post_id})
+    return json.loads(r.text)['body']
+
+def post_update(cookies, headers, data):
+    r = requests.post('https://api.fanbox.cc/post.update', cookies=cookies, headers=headers, data=data)
+    return json.loads(r.text)['body']
+
+def update_post_invite(post, discord_invite):
+    post['body']['blocks'][-1]['text'] = discord_invite
+
+def convert_post(post):
+    return { 'postId': post['id']
+        , 'status': post['status']
+        , 'feeRequired': post['feeRequired']
+        , 'title': post['title']
+        , 'body': json.dumps(post['body']['blocks'])
+        , 'tags': json.dumps(post['tags'])
+        , 'tt': 'a16cbb5611d546e8f4f509f9cbdf98b5' # IDK what this is, but it doesn't seem to change. A hash maybe?
+    }
+
 def get_supporters(cookies, headers):
     r = requests.get('https://api.fanbox.cc/relationship.listFans?status=supporter', cookies=cookies, headers=headers)
     return json.loads(r.text)['body']
@@ -118,8 +139,23 @@ def main(operator_mode):
     client = discord.Client(intents=intents)
     lock = asyncio.Lock()
 
-    async def discord_id_to_name(id):
-        await client.fetch_user(id)
+    async def regen_invite():
+        guild = client.guilds[0]
+        all_invites = await guild.invites()
+        invite:discord.Invite = all_invites[0]
+        await invite.delete()
+        return await invite.channel.create_invite(
+              max_age = invite.max_age
+            , max_uses = invite.max_uses
+            , temporary = invite.temporary
+            , unique = True
+        )
+
+    async def regen_fanbox_invite_post():
+        invite = await regen_invite()
+        fanbox_post = get_editable_post(config.session_cookies, config.session_headers, config.fanbox_discord_post_id)
+        update_post_invite(fanbox_post, invite.url)
+        post_update(config.session_cookies, config.session_headers, convert_post(fanbox_post))
 
     async def respond(message, condition, **kwargs):
         logging.info(f'User: {message.author}; Message: "{message.content}"; Response: {condition}')
@@ -203,6 +239,9 @@ def main(operator_mode):
                         names.append(member.name)
                         count += 1
                 await message.channel.send(f'purged {count} users without roles: {names}')
+        elif message.content.endswith('regen-invite'):
+            await regen_fanbox_invite_post()
+            await message.channel.send(f'invite regenerated')
         else:
             await message.channel.send('unknown command')
 
