@@ -21,7 +21,7 @@ The bot will log potential access abuse, such as when different users gain acces
     - https://discordpy.readthedocs.io/en/stable/discord.html
 - Install python:
     - https://www.python.org/downloads/
-- Run `setup.bat` to install dependencies. Run again after pulling latest to get new dependencies.
+- Run `pip install -r requirements.txt` to install dependencies. Run again after pulling latest to get new dependencies.
 - Copy `config-template.yml` to `config.yml`
 - In `config.yml`, update all of the spots with angle brackets: `<...>`
 - Run `python3 main.py`
