@@ -34,16 +34,16 @@ def get_payload(response):
 
 class FanboxClient:
     def __init__(self, cookies, headers) -> None:
-        self.client = httpx.AsyncClient(cookies=cookies, headers=headers)
+        self.client = httpx.AsyncClient(base_url='https://api.fanbox.cc/', cookies=cookies, headers=headers)
 
     async def get_editable_post(self, post_id):
-        return get_payload(await self.client.get('https://api.fanbox.cc/post.getEditable', params={'postId': post_id}))
+        return get_payload(await self.client.get('post.getEditable', params={'postId': post_id}))
 
     async def post_update(self, data):
-        return get_payload(await self.client.post('https://api.fanbox.cc/post.update', data=data))
+        return get_payload(await self.client.post('post.update', data=data))
 
-    async def get_supporters(self):
-        return get_payload(await self.client.get('https://api.fanbox.cc/relationship.listFans?status=supporter'))
+    async def get_user(self, user_id):
+        return get_payload(await self.client.get('legacy/manage/supporter/user', params={'userId': user_id}))
 
 def update_post_invite(post, discord_invite):
     post['body']['blocks'][-1]['text'] = discord_invite
@@ -58,22 +58,8 @@ def convert_post(post):
         , 'tt': 'a16cbb5611d546e8f4f509f9cbdf98b5' # IDK what this is, but it doesn't seem to change. A hash maybe?
     }
 
-def find_supporter(supporters, user_id):
-    for supporter in supporters:
-        user = supporter['user']
-        if user['userId'] == user_id:
-            return supporter
-    return None
-
 def make_roles_objects(plan_roles):
     return { k: discord.Object(v) for k, v in plan_roles.items() }
-
-def get_role_from_supporter(supporter, plan_roles):
-    if supporter:
-        for plan, role in plan_roles.items():
-            if supporter['planId'] == plan:
-                return role
-    return None
 
 def update_rate_limited(user_id, rate_limit, rate_limit_table):
     now = time.time()
@@ -105,6 +91,7 @@ def load_config(config_file):
         config = obj(yaml.load(f, Loader=yaml.Loader))
         config.key_roles = make_roles_objects(config.key_roles)
         config.plan_roles = make_roles_objects(config.plan_roles)
+        config.fallback_role = discord.Object(config.fallback_role)
         config.all_roles = list(config.key_roles.values()) + list(config.plan_roles.values())
         config.cleanup = obj(config.cleanup)
         return config
@@ -149,9 +136,13 @@ async def main(operator_mode):
         if config.key_mode:
             return config.key_roles.get(key)
         else:
-            supporters = await fanbox_client.get_supporters()
-            supporter = find_supporter(supporters, key)
-            return get_role_from_supporter(supporter, config.plan_roles)
+            user = await fanbox_client.get_user(key)
+            if user['supportingPlan']:
+                return config.plan_roles.get(user['supportingPlan']['id'])
+            elif config.allow_fallback:
+                return config.fallback_role if len(user['supportTransactions']) != 0 else None
+            else:
+                return None
 
     async def reset():
         async with lock:
@@ -275,6 +266,10 @@ async def main(operator_mode):
         elif message.content.endswith('regen-invite'):
             await regen_fanbox_invite_post()
             await message.channel.send(f'invite regenerated')
+        elif 'test-id' in message.content:
+            id = message.content.split()[-1]
+            role = await get_role_with_key(id)
+            await message.channel.send(f'{role}')
         else:
             await message.channel.send('unknown command')
 

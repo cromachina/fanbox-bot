@@ -18,11 +18,15 @@ key_mode: False
 
 # Add keys and their associated roles IDs here
 key_roles:
-  PASSWORD123: <ROLL_ID>
+  PASSWORD123: <ROLE_ID>
 
 # Add plans IDs and their associated role IDs here
 plan_roles:
-  '12345': <ROLL_ID>
+  '12345': <ROLE_ID>
+
+# Allow an unsubscribed user to get access if they have subscribed before
+allow_fallback: False
+fallback_role: <ROLE_ID>
 
 # Clear all of the user's plan roles before applying a new role
 clear_roles: False
