@@ -43,7 +43,10 @@ class FanboxClient:
         return get_payload(await self.client.post('post.update', data=data))
 
     async def get_user(self, user_id):
-        return get_payload(await self.client.get('legacy/manage/supporter/user', params={'userId': user_id}))
+        response = await self.client.get('legacy/manage/supporter/user', params={'userId': user_id})
+        if response.status_code == 400:
+            return None
+        return get_payload(response)
 
 def update_post_invite(post, discord_invite):
     post['body']['blocks'][-1]['text'] = discord_invite
@@ -137,7 +140,9 @@ async def main(operator_mode):
             return config.key_roles.get(key)
         else:
             user = await fanbox_client.get_user(key)
-            if user['supportingPlan']:
+            if not user:
+                return None
+            elif user['supportingPlan']:
                 return config.plan_roles.get(user['supportingPlan']['id'])
             elif config.allow_fallback:
                 return config.fallback_role if len(user['supportTransactions']) != 0 else None
