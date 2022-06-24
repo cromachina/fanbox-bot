@@ -1,10 +1,14 @@
-# Bot access token for discord
+# Bot access token for discord.
+# [SECURITY] These bot tokens should be treated like secrets as they allow the
+# bot program to connect to Discord servers.
 discord_token: <DISCORD_BOT_TOKEN>
 
-# This is for testing out commands with another bot
+# This is for testing out commands with another bot, optional.
 operator_token: <DISCORD_OPERATOR_BOT_TOKEN>
 
-# ID of the user to use admin commands
+# ID of the user to use admin commands.
+# This must be a number, like 12345. You can get this by turning on developer
+# mode in Discord, right clicking on your name, and select "Copy ID".
 admin_id: <DISCORD_ADMIN_ID>
 
 # File to log system information to
@@ -16,22 +20,31 @@ rate_limit: 60
 # Select if we are in key mode or plan mode for access check.
 key_mode: False
 
-# Add keys and their associated roles IDs here
+# Add keys and their associated roles IDs here.
+# The password must be a string with letters and numbers, or a 'quoted' number.
+# <ROLE_ID> must be a number, like 12345. You can get this by turning on developer
+# mode in Discord, go to your server role settings, right click on the role
+# and select "Copy ID".
 key_roles:
   PASSWORD123: <ROLE_ID>
 
-# Add plans IDs and their associated role IDs here
+# Add plans IDs and their associated role IDs here.
+# The plan ID number on the left hand side must be a string, like '12345', and not 12345
+# <ROLE_ID> must be a number, same as above.
 plan_roles:
   '12345': <ROLE_ID>
 
-# Allow an unsubscribed user to get access if they have subscribed before
+# Allow an unsubscribed user to get access if they have subscribed before.
 allow_fallback: False
+# This must be a number, same as above.
 fallback_role: <ROLE_ID>
 
 # Clear all of the user's plan roles before applying a new role
 clear_roles: False
 
-# The fanbox post that contains the discord invite
+# The fanbox post that contains the discord invite.
+# This must be a number, like 12345. You can get this from the address bar of the
+# relevant fanbox post, such as "fanbox.cc/posts/12345"
 fanbox_discord_post_id: <POST_ID>
 
 # Periodic cleanup routines. Only runs after user activity
@@ -54,7 +67,10 @@ system_messages:
   access_granted: "Access granted. Please check the server for new channels!\nアクセスが許可されました。新しいチャンネルがないか、サーバーをチェックしてみてください！"
   system_error: "An error has occurred! The admin has been notified to fix it.\nエラーが発生しました！管理者が修正するように通知されています。"
 
-# Update these with cookies from your FANBOX page. Needed to contact the FANBOX API
+# Update these with cookies from your FANBOX page. Needed to contact the FANBOX API.
+# All values filled in must be strings, so if it's a number, you must 'quote' it, like '12345'.
+# [SECURITY] The values here should be treated like secrets, because they allow the bot
+# to act on your behalf on FANBOX.
 session_cookies:
   p_ab_id: '2'
   p_ab_id_2: '5'
@@ -63,7 +79,7 @@ session_cookies:
   privacy_policy_agreement: '3'
   FANBOXSESSID: <FANBOX_SESSION_ID>
 
-# Do not change unless you know what you are doing. Needed to contact the FANBOX API
+# Do not change unless you know what you are doing. Needed to contact the FANBOX API.
 session_headers:
   accept: application/json, text/plain, */*
   accept-language: en-US,en;q=0.9,ja;q=0.8
