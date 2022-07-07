@@ -304,7 +304,11 @@ async def main(operator_mode):
     if config.cleanup.run:
         periodic(cleanup, config.cleanup.period_hours * 60 * 60)
 
-    await client.start(token)
+    while True:
+        await client.start(token, reconnect=False)
+        delay = 10
+        logging.warn('Disconnected: reconnecting in {delay}s')
+        await asyncio.sleep(delay)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
