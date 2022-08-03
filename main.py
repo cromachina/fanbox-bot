@@ -30,7 +30,7 @@ def periodic(func, timeout):
     return asyncio.create_task(run())
 
 def get_payload(response, check_error=True):
-    if check_error and response.is_error():
+    if check_error and response.is_error:
         raise Exception('Fanbox API error', response, response.text)
     return json.loads(response.text)['body']
 
@@ -46,7 +46,7 @@ class FanboxClient:
 
     async def get_user(self, user_id):
         response = await self.client.get('legacy/manage/supporter/user', params={'userId': user_id})
-        if response.is_error():
+        if response.is_error:
             return None
         return get_payload(response, check_error=False)
 
