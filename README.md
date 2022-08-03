@@ -21,6 +21,8 @@ The bot will log potential access abuse, such as when different users gain acces
 ## Install and configuration
 - Create a Discord app and bot:
     - https://discordpy.readthedocs.io/en/stable/discord.html
+    - Additional step: Go to your bot application settings, under the `Bot` tab, scroll down to `server members intent` and turn it on.
+        - This intent is needed for the reset and purge functionality to work, even if they are not used.
 - Install python with pip:
     - https://www.python.org/downloads/
 - Run `pip install -r requirements.txt` to install dependencies. Run again after pulling latest to get new dependencies.
