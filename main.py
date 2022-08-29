@@ -309,7 +309,7 @@ async def main(operator_mode):
     while True:
         await client.start(token, reconnect=False)
         delay = 10
-        logging.warn('Disconnected: reconnecting in {delay}s')
+        logging.warning('Disconnected: reconnecting in {delay}s')
         await asyncio.sleep(delay)
 
 if __name__ == '__main__':
