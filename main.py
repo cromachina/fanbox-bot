@@ -307,9 +307,12 @@ async def main(operator_mode):
         periodic(cleanup, config.cleanup.period_hours * 60 * 60)
 
     while True:
-        await client.start(token, reconnect=False)
+        try:
+            await client.start(token, reconnect=False)
+        except Exception as ex:
+            logging.exception(ex)
         delay = 10
-        logging.warning('Disconnected: reconnecting in {delay}s')
+        logging.warning(f'Disconnected: reconnecting in {delay}s')
         await asyncio.sleep(delay)
 
 if __name__ == '__main__':
