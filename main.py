@@ -311,6 +311,7 @@ async def main(operator_mode):
             await client.start(token, reconnect=False)
         except Exception as ex:
             logging.exception(ex)
+        await client.logout()
         delay = 10
         logging.warning(f'Disconnected: reconnecting in {delay}s')
         await asyncio.sleep(delay)
