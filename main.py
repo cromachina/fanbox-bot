@@ -6,6 +6,7 @@ import logging
 import os
 import pickle
 import re
+import sys
 import time
 
 import discord
@@ -314,7 +315,12 @@ async def main(operator_mode):
         await client.logout()
         delay = 10
         logging.warning(f'Disconnected: reconnecting in {delay}s')
-        await asyncio.sleep(delay)
+        # Because discord.py is not closing aiohttp clients correctly,
+        # the process has to be completely restarted to get into a good state.
+        # If disconnects are frequent, the periodic cleanup function may never run.
+        # A new discord client could be created, but then aiohttp sockets may leak,
+        # and eventually resources would be exhausted.
+        os.execv(sys.executable, sys.argv)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
