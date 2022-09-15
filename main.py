@@ -3,6 +3,7 @@ import asyncio
 import datetime
 import json
 import logging
+import multiprocessing as mp
 import os
 import pickle
 import re
@@ -307,23 +308,30 @@ async def main(operator_mode):
     if config.cleanup.run:
         periodic(cleanup, config.cleanup.period_hours * 60 * 60)
 
-    while True:
-        try:
-            await client.start(token, reconnect=False)
-        except Exception as ex:
-            logging.exception(ex)
-        await client.logout()
-        delay = 10
-        logging.warning(f'Disconnected: reconnecting in {delay}s')
-        # Because discord.py is not closing aiohttp clients correctly,
-        # the process has to be completely restarted to get into a good state.
-        # If disconnects are frequent, the periodic cleanup function may never run.
-        # A new discord client could be created, but then aiohttp sockets may leak,
-        # and eventually resources would be exhausted.
-        os.execv(sys.executable, sys.argv)
+    try:
+        await client.start(token, reconnect=False)
+    except Exception as ex:
+        logging.exception(ex)
+    await client.close()
+    delay = 10
+    logging.warning(f'Disconnected: reconnecting in {delay}s')
+    await asyncio.sleep(delay)
+
+def run_main(operator):
+    asyncio.run(main(operator))
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--operator', action='store_true')
     args = parser.parse_args()
-    asyncio.run(main(args.operator))
+
+    while True:
+        # Because discord.py is not closing aiohttp clients correctly,
+        # the process has to be completely restarted to get into a good state.
+        # If disconnects are frequent, the periodic cleanup function may never run.
+        # A new discord client could be created, but then aiohttp sockets may leak,
+        # and eventually resources would be exhausted.
+        p = mp.Process(target=run_main, daemon=True, args=(args.operator,))
+        p.start()
+        p.join()
+
