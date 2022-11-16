@@ -166,6 +166,8 @@ async def main(operator_mode):
     lock = asyncio.Lock()
 
     async def get_fanbox_role_with_key(key):
+        if not config.enable_fanbox:
+            return None
         user = await fanbox_client.get_user(key)
         if not user:
             return None
@@ -177,6 +179,8 @@ async def main(operator_mode):
             return None
 
     async def get_fantia_role_with_key(key):
+        if not config.enable_fantia:
+            return None
         user = await fantia_client.get_user(key)
         if not user:
             return None

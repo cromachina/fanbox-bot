@@ -17,6 +17,10 @@ log_file: log.txt
 # Number of seconds to wait between processing a user's message. Spam protection
 rate_limit: 60
 
+# Enable or disable access processing for the given platforms.
+enable_fanbox: True
+enable_fantia: True
+
 # Select if we are in key mode or plan mode for access check.
 key_mode: False
 
