@@ -1,3 +1,4 @@
-discord.py==1.7.3
+discord.py==2.1.0
 httpx==0.22.0
+httpx_caching==0.1a2
 PyYAML==6.0

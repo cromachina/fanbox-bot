@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import csv
 import datetime
 import json
 import logging
@@ -7,17 +8,18 @@ import multiprocessing as mp
 import os
 import pickle
 import re
-import sys
 import time
 
 import discord
 import httpx
+import httpx_caching
 import yaml
 from discord.flags import Intents
 
 config_file = 'config.yml'
 registry_file = 'registry.dat'
-id_prog = re.compile('(\d+)')
+fanbox_id_prog = re.compile('(\d+)')
+fantia_id_prog = re.compile('(tus_[a-zA-Z0-9]+)')
 
 class obj:
     def __init__(self, d):
@@ -39,6 +41,7 @@ def get_payload(response, check_error=True):
 class FanboxClient:
     def __init__(self, cookies, headers) -> None:
         self.client = httpx.AsyncClient(base_url='https://api.fanbox.cc/', cookies=cookies, headers=headers)
+        self.client = httpx_caching.CachingClient(self.client)
 
     async def get_editable_post(self, post_id):
         return get_payload(await self.client.get('post.getEditable', params={'postId': post_id}))
@@ -51,6 +54,22 @@ class FanboxClient:
         if response.is_error:
             return None
         return get_payload(response, check_error=False)
+
+class FantiaClient:
+    def __init__(self, cookies, headers) -> None:
+        self.client = httpx.AsyncClient(base_url='https://fantia.jp/', cookies=cookies, headers=headers)
+        self.client = httpx_caching.CachingClient(self.client)
+
+    async def get_user(self, user_id):
+        response = await self.client.get('mypage/fanclubs/users.csv')
+        response.encoding = 'shift-jis'
+        data = csv.reader(response.text.splitlines())
+        next(data)
+        next(data)
+        for row in data:
+            if len(row) >= 2 and row[0] == user_id:
+                return row
+        return None
 
 def update_post_invite(post, discord_invite):
     post['body']['blocks'][-1]['text'] = discord_invite
@@ -76,8 +95,14 @@ def update_rate_limited(user_id, rate_limit, rate_limit_table):
         return False
     return True
 
-def get_id(message):
-    result = id_prog.search(message)
+def get_fanbox_id(message):
+    result = fanbox_id_prog.search(message)
+    if result:
+        return result.group(1)
+    return None
+
+def get_fantia_id(message):
+    result = fantia_id_prog.search(message)
     if result:
         return result.group(1)
     return None
@@ -137,21 +162,25 @@ async def main(operator_mode):
     intents.members = True
     client = discord.Client(intents=intents)
     fanbox_client = FanboxClient(config.session_cookies, config.session_headers)
+    fantia_client = FantiaClient(config.fantia_session_cookies, config.fantia_session_headers)
     lock = asyncio.Lock()
 
-    async def get_role_with_key(key):
-        if config.key_mode:
-            return config.key_roles.get(key)
+    async def get_fanbox_role_with_key(key):
+        user = await fanbox_client.get_user(key)
+        if not user:
+            return None
+        elif user['supportingPlan']:
+            return config.plan_roles.get(user['supportingPlan']['id'])
+        elif config.allow_fallback:
+            return config.fallback_role if len(user['supportTransactions']) != 0 else None
         else:
-            user = await fanbox_client.get_user(key)
-            if not user:
-                return None
-            elif user['supportingPlan']:
-                return config.plan_roles.get(user['supportingPlan']['id'])
-            elif config.allow_fallback:
-                return config.fallback_role if len(user['supportTransactions']) != 0 else None
-            else:
-                return None
+            return None
+
+    async def get_fantia_role_with_key(key):
+        user = await fantia_client.get_user(key)
+        if not user:
+            return None
+        return config.plan_roles.get(user[2])
 
     async def reset():
         async with lock:
@@ -212,7 +241,6 @@ async def main(operator_mode):
     async def handle_access(message):
         guild = None
         member = None
-        key = None
 
         guild = client.guilds[0]
         try:
@@ -228,16 +256,28 @@ async def main(operator_mode):
             await respond(message, 'rate_limited', rate_limit=config.rate_limit)
             return
 
-        key = message.content
+        fanbox_key = None
+        fantia_key = None
+        role = None
+        key = None
 
-        if not config.key_mode:
-            key = get_id(message.content)
+        if config.key_mode:
+            role = config.key_roles.get(message.content)
+        else:
+            fanbox_key = get_fanbox_id(message.content)
+            fantia_key = get_fantia_id(message.content)
 
-            if not key:
+            if not fanbox_key and not fantia_key:
                 await respond(message, 'no_id_found')
                 return
 
-        role = await get_role_with_key(key)
+            role = await get_fanbox_role_with_key(fanbox_key)
+            if role:
+                key = fanbox_key
+            elif fantia_key is not None:
+                role = await get_fantia_role_with_key(fantia_key)
+                if role:
+                    key = fantia_key
 
         if not role:
             await respond(message, 'access_denied')
@@ -246,9 +286,10 @@ async def main(operator_mode):
         async with lock:
             if config.clear_roles:
                 await member.remove_roles(*config.all_roles)
-
             await member.add_roles(role)
-            if not config.key_mode:
+
+            # Registry logging
+            if not config.key_mode and not operator_mode:
                 discord_ids, pixiv_ids = update_registry(member.id, key)
                 if discord_ids and len(discord_ids) > 1:
                     logging.warning(f'Pixiv ID {key} has multiple registered users:')
@@ -277,8 +318,9 @@ async def main(operator_mode):
             await message.channel.send(f'invite regenerated')
         elif 'test-id' in message.content:
             id = message.content.split()[-1]
-            role = await get_role_with_key(id)
-            await message.channel.send(f'{role}')
+            fanbox_role = await get_fanbox_role_with_key(id)
+            fantia_role = await get_fantia_role_with_key(id)
+            await message.channel.send(f'fanbox {fanbox_role}, fantia {fantia_role}')
         else:
             await message.channel.send('unknown command')
 
@@ -294,9 +336,11 @@ async def main(operator_mode):
             return
 
         try:
+            if operator_mode and message.author.id != config.admin_id:
+                return
             if (message.author.id == config.admin_id and message.content.startswith('!')):
                 await handle_admin(message)
-            elif not operator_mode:
+            else:
                 await handle_access(message)
 
         except Exception as ex:
