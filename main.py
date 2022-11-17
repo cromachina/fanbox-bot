@@ -216,7 +216,7 @@ async def main(operator_mode):
         logging.info(f'invite regenerated: {invite.url}')
 
     def is_old_member(joined_at):
-        return joined_at + datetime.timedelta(hours=config.cleanup.member_age_hours) <= datetime.datetime.now()
+        return joined_at + datetime.timedelta(hours=config.cleanup.member_age_hours) <= datetime.datetime.now(joined_at.tzinfo)
 
     async def purge():
         async with lock:
