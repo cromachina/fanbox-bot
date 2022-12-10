@@ -123,7 +123,7 @@ def load_config(config_file):
         config = obj(yaml.load(f, Loader=yaml.Loader))
         config.key_roles = make_roles_objects(config.key_roles)
         config.plan_roles = make_roles_objects(config.plan_roles)
-        config.fallback_role = discord.Object(config.fallback_role)
+        config.fallback_role = discord.Object(int(config.fallback_role))
         config.all_roles = list(config.key_roles.values()) + list(config.plan_roles.values())
         config.cleanup = obj(config.cleanup)
         return config
