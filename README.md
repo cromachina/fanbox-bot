@@ -1,5 +1,5 @@
 # Fanbox Discord Bot
-This bot is used to automate access control for my Fanbox Discord server.
+This bot is used to automate access control for my Fanbox Discord server. This bot can also provide access control for Fantia users.
 
 The bot accesses the Fanbox API using your Fanbox session token. This is found in your browser cookies when accessing Fanbox.
 
@@ -14,7 +14,7 @@ However, when `allow_fallback` is set to `True` and `fallback_role` is configure
 ## Other functionality
 The bot can be configured to periodically purge old users without roles.
 
-The bot can automatically update the Discord invite and Fanbox post which contains the invite link. The link in the Fanbox post should be the last line, which will be replaced with the new link.
+The bot can automatically update the Discord invite and Fanbox post which contains the invite link. The link in the Fanbox post should be the last line, which will be replaced with the new link. This is currently not implemented for Fantia.
 
 The bot will log potential access abuse, such as when different users gain access with the same Pixiv ID. However, no automated action is taken.
 
