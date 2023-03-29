@@ -84,8 +84,18 @@ def convert_post(post):
         , 'tt': 'a16cbb5611d546e8f4f509f9cbdf98b5' # IDK what this is, but it doesn't seem to change. A hash maybe?
     }
 
+def map_dict(a, f):
+    b = {}
+    for kv in a.items():
+        k, v = f(*kv)
+        b[k] = v
+    return b
+
 def make_roles_objects(plan_roles):
-    return { k: discord.Object(v) for k, v in plan_roles.items() }
+    return map_dict(plan_roles, lambda k, v: (str(k), discord.Object(int(v))))
+
+def str_values(d):
+    return map_dict(d, lambda k, v: (k, str(v)))
 
 def update_rate_limited(user_id, rate_limit, rate_limit_table):
     now = time.time()
@@ -126,6 +136,8 @@ def load_config(config_file):
         config.fallback_role = discord.Object(int(config.fallback_role))
         config.all_roles = list(config.key_roles.values()) + list(config.plan_roles.values())
         config.cleanup = obj(config.cleanup)
+        config.session_cookies = str_values(config.session_cookies)
+        config.fantia_session_cookies = str_values(config.fantia_session_cookies)
         return config
 
 def load_registry():
