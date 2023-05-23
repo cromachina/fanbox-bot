@@ -195,7 +195,6 @@ async def main(operator_mode):
         guild = client.guilds[0]
         async for member in guild.fetch_members(limit=None):
             await derole_check_fanbox_supporter(member)
-            await asyncio.sleep(0.25)
 
     async def get_fanbox_role_with_pixiv_id(pixiv_id):
         user_data = await get_fanbox_user_data(pixiv_id, force_update=True)
