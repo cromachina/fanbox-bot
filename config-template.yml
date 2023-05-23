@@ -31,12 +31,6 @@ fallback_role: <ROLE_ID>
 # Clear all of the user's plan roles before applying a new role
 clear_roles: False
 
-# The fanbox post that contains the discord invite.
-# This must be a number, like 12345. You can get this from the address bar of the
-# relevant fanbox post, such as "fanbox.cc/posts/12345"
-# If you are not using this, just put 0.
-fanbox_discord_post_id: <POST_ID>
-
 # Periodic cleanup routines. Only runs after user activity
 cleanup:
   # If we should even run cleanup routines at all
