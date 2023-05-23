@@ -17,21 +17,6 @@ log_file: log.txt
 # Number of seconds to wait between processing a user's message. Spam protection
 rate_limit: 60
 
-# Enable or disable access processing for the given platforms.
-enable_fanbox: True
-enable_fantia: True
-
-# Select if we are in key mode or plan mode for access check.
-key_mode: False
-
-# Add keys and their associated roles IDs here.
-# The password must be a string with letters and numbers, or a 'quoted' number.
-# <ROLE_ID> must be a number, like 12345. You can get this by turning on developer
-# mode in Discord, go to your server role settings, right click on the role
-# and select "Copy ID".
-key_roles:
-  PASSWORD123: <ROLE_ID>
-
 # Add plans IDs and their associated role IDs here.
 # The plan ID number on the left hand side must be a string, like '12345', and not 12345
 # <ROLE_ID> must be a number, same as above.
@@ -49,6 +34,7 @@ clear_roles: False
 # The fanbox post that contains the discord invite.
 # This must be a number, like 12345. You can get this from the address bar of the
 # relevant fanbox post, such as "fanbox.cc/posts/12345"
+# If you are not using this, just put 0.
 fanbox_discord_post_id: <POST_ID>
 
 # Periodic cleanup routines. Only runs after user activity
@@ -59,13 +45,15 @@ cleanup:
   period_hours: 24
   # Purge no-roll members older than X hours
   member_age_hours: 24
-  # Update the fanbox invite post after a non-empty purge, otherwise do nothing
-  update_invite: True
+
+# Derole an unsubscribed user after an extended period of no transactions.
+auto_derole:
+  run: False
+  period_hours: 24
 
 # Messages to return to the user for each condition
 system_messages:
   rate_limited: "Rate limited, please wait {rate_limit} seconds.\nレートが制限されていますので、{rate_limit}秒お待ちください。"
-  not_member: "Cannot grant access as you are not in the server.\nサーバーに参加していないため、アクセスを付与できません。"
   no_id_found: "Cannot detect a user ID in your message.\nメッセージ内のユーザーIDを検出できません。"
   access_denied: "Access denied.\nアクセスが拒否されました。"
   access_granted: "Access granted. Please check the server for new channels!\nアクセスが許可されました。新しいチャンネルがないか、サーバーをチェックしてみてください！"
@@ -96,22 +84,3 @@ session_headers:
   referrerPolicy: strict-origin-when-cross-origin
   origin: https://www.fanbox.cc
   user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36
-
-# Update these with cookies from your Fantia page. Needed to contact the Fantia API.
-fantia_session_cookies:
-  _session_id: <FANTIA_SESSION_ID>
-
-# Do not change unless you know what you are doing. Needed to contact the Fantia API.
-fantia_session_headers:
-  accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9
-  accept-encoding: gzip, deflate, br
-  accept-language: en-US,en;q=0.9,ja;q=0.8
-  dnt: '1'
-  referer: https://fantia.jp/
-  sec-ch-ua: '"Google Chrome";v="107", "Chromium";v="107", "Not=A?Brand";v="24"'
-  sec-ch-ua-mobile: '?0'
-  sec-fetch-dest: document
-  sec-fetch-mode: navigate
-  sec-fetch-site: same-origin
-  sec-fetch-user: '?1'
-  user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36

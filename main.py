@@ -1,15 +1,14 @@
 import argparse
 import asyncio
-import csv
+import calendar
 import datetime
 import json
 import logging
 import multiprocessing as mp
-import os
-import pickle
 import re
 import time
 
+import aiosqlite
 import discord
 import httpx
 import httpx_caching
@@ -17,9 +16,9 @@ import yaml
 from discord.flags import Intents
 
 config_file = 'config.yml'
-registry_file = 'registry.dat'
+registry_db = 'registry.db'
 fanbox_id_prog = re.compile('(\d+)')
-fantia_id_prog = re.compile('(tus_[a-zA-Z0-9]+)')
+periodic_tasks = []
 
 class obj:
     def __init__(self, d):
@@ -29,9 +28,11 @@ class obj:
 def periodic(func, timeout):
     async def run():
         while True:
-            await asyncio.sleep(timeout)
             await func()
-    return asyncio.create_task(run())
+            await asyncio.sleep(timeout)
+    task = asyncio.create_task(run())
+    periodic_tasks.append(task)
+    return task
 
 def get_payload(response, check_error=True):
     if check_error and response.is_error:
@@ -43,46 +44,11 @@ class FanboxClient:
         self.client = httpx.AsyncClient(base_url='https://api.fanbox.cc/', cookies=cookies, headers=headers)
         self.client = httpx_caching.CachingClient(self.client)
 
-    async def get_editable_post(self, post_id):
-        return get_payload(await self.client.get('post.getEditable', params={'postId': post_id}))
-
-    async def post_update(self, data):
-        return get_payload(await self.client.post('post.update', data=data))
-
     async def get_user(self, user_id):
         response = await self.client.get('legacy/manage/supporter/user', params={'userId': user_id})
         if response.is_error:
             return None
         return get_payload(response, check_error=False)
-
-class FantiaClient:
-    def __init__(self, cookies, headers) -> None:
-        self.client = httpx.AsyncClient(base_url='https://fantia.jp/', cookies=cookies, headers=headers)
-        self.client = httpx_caching.CachingClient(self.client)
-
-    async def get_user(self, user_id):
-        response = await self.client.get('mypage/fanclubs/users.csv')
-        response.encoding = 'shift-jis'
-        data = csv.reader(response.text.splitlines())
-        next(data)
-        next(data)
-        for row in data:
-            if len(row) >= 2 and row[0] == user_id:
-                return row
-        return None
-
-def update_post_invite(post, discord_invite):
-    post['body']['blocks'][-1]['text'] = discord_invite
-
-def convert_post(post):
-    return { 'postId': post['id']
-        , 'status': post['status']
-        , 'feeRequired': post['feeRequired']
-        , 'title': post['title']
-        , 'body': json.dumps(post['body']['blocks'])
-        , 'tags': json.dumps(post['tags'])
-        , 'tt': 'a16cbb5611d546e8f4f509f9cbdf98b5' # IDK what this is, but it doesn't seem to change. A hash maybe?
-    }
 
 def map_dict(a, f):
     b = {}
@@ -105,14 +71,8 @@ def update_rate_limited(user_id, rate_limit, rate_limit_table):
         return False
     return True
 
-def get_fanbox_id(message):
+def get_fanbox_pixiv_id(message):
     result = fanbox_id_prog.search(message)
-    if result:
-        return result.group(1)
-    return None
-
-def get_fantia_id(message):
-    result = fantia_id_prog.search(message)
     if result:
         return result.group(1)
     return None
@@ -136,35 +96,75 @@ def load_config(config_file):
         config.fallback_role = discord.Object(int(config.fallback_role))
         config.all_roles = list(config.key_roles.values()) + list(config.plan_roles.values())
         config.cleanup = obj(config.cleanup)
+        config.auto_derole = obj(config.auto_derole)
         config.session_cookies = str_values(config.session_cookies)
-        config.fantia_session_cookies = str_values(config.fantia_session_cookies)
         return config
 
-def load_registry():
-    if not os.path.isfile(registry_file):
-        return {'pixiv_ids': {}, 'discord_ids':{}}
-    with open(registry_file, 'rb') as f:
-        return pickle.load(f)
+def parse_date(date_string):
+    return datetime.datetime.fromisoformat(date_string)
 
-def save_registry(registry):
-    with open(registry_file, 'wb') as f:
-        pickle.dump(registry, f)
+def previous_month(date):
+    date = date - datetime.timedelta(days = 1)
+    return datetime.datetime(year=date.year, month=date.month)
 
-def delete_registry():
-    if os.path.isfile(registry_file):
-        os.remove(registry_file)
+def days_in_month(date):
+    return calendar.monthrange(date.year, date.month)[1]
 
-def append_field(table, field_id, set_id):
-    data = table.get(field_id, set())
-    data.add(set_id)
-    table[field_id] = data
+def compute_last_day(txns):
+    stop_date = datetime.datetime.min.replace(tzinfo=datetime.timezone.min)
+    for txn in reversed(txns):
+        date = parse_date(txn['transactionDatetime'])
+        if stop_date < date:
+            stop_date = date + datetime.timedelta(days=days_in_month(date))
+        else:
+            diff = abs(date - stop_date)
+            stop_date = date + datetime.timedelta(days=days_in_month(date)) + diff
+    return stop_date
 
-def update_registry(discord_id, pixiv_id):
-    registry = load_registry()
-    append_field(registry['pixiv_ids'], pixiv_id, discord_id)
-    append_field(registry['discord_ids'], discord_id, pixiv_id)
-    save_registry(registry)
-    return (registry['pixiv_ids'].get(pixiv_id), registry['discord_ids'].get(discord_id))
+def is_user_fanbox_subscribed(user_data):
+    if user_data is None:
+        return False
+    txns = user_data['supportTransactions']
+    if not txns:
+        return False
+    last_day = compute_last_day(txns)
+    return last_day >= datetime.datetime.now(last_day.tzinfo)
+
+async def open_database():
+    db = await aiosqlite.connect(registry_db)
+    await db.execute('create table if not exists user_data (pixiv_id integer not null primary key, data text)')
+    await db.execute('create table if not exists member_pixiv (member_id integer not null primary key, pixiv_id integer)')
+    return db
+
+async def get_user_data_db(db, pixiv_id):
+    cursor = await db.execute('select data from user_data where pixiv_id = ?', (pixiv_id,))
+    user_data = await cursor.fetchone()
+    if user_data is not None:
+        user_data = json.loads(user_data[0])
+    return user_data
+
+async def update_user_data_db(db, pixiv_id, user_data):
+    if user_data is not None:
+        await db.execute('replace into user_data values(?, ?)', (pixiv_id, json.dumps(user_data)))
+        await db.commit()
+
+async def get_member_pixiv_id(db, member:discord.Member):
+    cursor = await db.execute('select pixiv_id from member_pixiv where member_id = ?', (member.id,))
+    result = await cursor.fetchone()
+    if result is not None:
+        result = result[0]
+    return result
+
+async def update_member_pixiv_id(db, member:discord.Member, pixiv_id):
+    await db.execute('replace into member_pixiv values(?, ?)', (member.id, pixiv_id))
+    await db.commit()
+
+async def get_latest_fanbox_user_data(fanbox_client, db, pixiv_id, force_update=False):
+    user_data = await get_user_data_db(db, pixiv_id)
+    if force_update or not is_user_fanbox_subscribed(user_data):
+        user_data = await fanbox_client.get_user(pixiv_id)
+    await update_user_data_db(db, pixiv_id, user_data)
+    return user_data
 
 async def main(operator_mode):
     config = load_config(config_file)
@@ -174,29 +174,41 @@ async def main(operator_mode):
     intents.members = True
     client = discord.Client(intents=intents)
     fanbox_client = FanboxClient(config.session_cookies, config.session_headers)
-    fantia_client = FantiaClient(config.fantia_session_cookies, config.fantia_session_headers)
     lock = asyncio.Lock()
+    db = await open_database()
 
-    async def get_fanbox_role_with_key(key):
-        if not config.enable_fanbox:
+    async def get_fanbox_user_data(pixiv_id, force_update=False):
+        return await get_latest_fanbox_user_data(fanbox_client, db, pixiv_id, force_update)
+
+    async def derole_check_fanbox_supporter(member:discord.Member):
+        if len(member.roles) == 1:
+            return
+        pixiv_id = await get_member_pixiv_id(db, member)
+        if pixiv_id is None or not is_user_fanbox_subscribed(await get_fanbox_user_data(pixiv_id)):
+            try:
+                await member.remove_roles(*config.all_roles)
+            except:
+                pass
+            logging.info(f'Derole: {member}')
+
+    async def derole_check_all_fanbox_supporters():
+        guild = client.guilds[0]
+        async for member in guild.fetch_members(limit=None):
+            await derole_check_fanbox_supporter(member)
+            await asyncio.sleep(1)
+
+    async def get_fanbox_role_with_pixiv_id(pixiv_id):
+        user_data = await get_fanbox_user_data(pixiv_id, force_update=True)
+        if not user_data:
             return None
-        user = await fanbox_client.get_user(key)
-        if not user:
+        if not is_user_fanbox_subscribed(user_data):
             return None
-        elif user['supportingPlan']:
-            return config.plan_roles.get(user['supportingPlan']['id'])
+        elif user_data['supportingPlan']:
+            return config.plan_roles.get(user_data['supportingPlan']['id'])
         elif config.allow_fallback:
-            return config.fallback_role if len(user['supportTransactions']) != 0 else None
+            return config.fallback_role if len(user_data['supportTransactions']) != 0 else None
         else:
             return None
-
-    async def get_fantia_role_with_key(key):
-        if not config.enable_fantia:
-            return None
-        user = await fantia_client.get_user(key)
-        if not user:
-            return None
-        return config.plan_roles.get(user[2])
 
     async def reset():
         async with lock:
@@ -205,27 +217,7 @@ async def main(operator_mode):
             async for member in guild.fetch_members(limit=None):
                 await member.remove_roles(*config.all_roles)
                 count += 1
-            delete_registry()
             return count
-
-    async def regen_invite():
-        guild = client.guilds[0]
-        all_invites = await guild.invites()
-        invite:discord.Invite = all_invites[0]
-        await invite.delete()
-        return await invite.channel.create_invite(
-              max_age = invite.max_age
-            , max_uses = invite.max_uses
-            , temporary = invite.temporary
-            , unique = True
-        )
-
-    async def regen_fanbox_invite_post():
-        invite = await regen_invite()
-        fanbox_post = await fanbox_client.get_editable_post(config.fanbox_discord_post_id)
-        update_post_invite(fanbox_post, invite.url)
-        await fanbox_client.post_update(convert_post(fanbox_post))
-        logging.info(f'invite regenerated: {invite.url}')
 
     def is_old_member(joined_at):
         return joined_at + datetime.timedelta(hours=config.cleanup.member_age_hours) <= datetime.datetime.now(joined_at.tzinfo)
@@ -244,9 +236,7 @@ async def main(operator_mode):
 
     async def cleanup():
         try:
-            names = await purge()
-            if len(names) > 0 and config.cleanup.update_invite:
-                await regen_fanbox_invite_post()
+            await purge()
         except Exception as ex:
             logging.exception(ex)
 
@@ -272,53 +262,24 @@ async def main(operator_mode):
             await respond(message, 'rate_limited', rate_limit=config.rate_limit)
             return
 
-        fanbox_key = None
-        fantia_key = None
-        role = None
-        key = None
+        pixiv_id = get_fanbox_pixiv_id(message.content)
 
-        if config.key_mode:
-            role = config.key_roles.get(message.content)
-        else:
-            fanbox_key = get_fanbox_id(message.content)
-            fantia_key = get_fantia_id(message.content)
+        if pixiv_id is None:
+            await respond(message, 'no_id_found')
+            return
 
-            if not fanbox_key and not fantia_key:
-                await respond(message, 'no_id_found')
-                return
-
-            role = await get_fanbox_role_with_key(fanbox_key)
-            if role:
-                key = fanbox_key
-            elif fantia_key is not None:
-                role = await get_fantia_role_with_key(fantia_key)
-                if role:
-                    key = fantia_key
+        role = await get_fanbox_role_with_pixiv_id(pixiv_id)
 
         if not role:
-            await respond(message, 'access_denied')
+            await respond(message, 'access_denied', id=pixiv_id)
             return
+
+        await update_member_pixiv_id(db, member, pixiv_id)
 
         async with lock:
             if config.clear_roles:
                 await member.remove_roles(*config.all_roles)
             await member.add_roles(role)
-
-            # Registry logging
-            if not config.key_mode and not operator_mode:
-                discord_ids, pixiv_ids = update_registry(member.id, key)
-                if discord_ids and len(discord_ids) > 1:
-                    logging.warning(f'Pixiv ID {key} has multiple registered users:')
-                    for discord_id in discord_ids:
-                        try:
-                            user = await client.fetch_user(discord_id)
-                            logging.warning(f'    {user}')
-                        except:
-                            logging.warning(f'    {discord_id} (No user found)')
-                if pixiv_ids and len(pixiv_ids) > 1:
-                    logging.warning(f'User {member} has multiple registered pixiv IDs:')
-                    for pixiv_id in pixiv_ids:
-                        logging.warning(f'    {pixiv_id}')
 
         await respond(message, 'access_granted')
 
@@ -329,14 +290,10 @@ async def main(operator_mode):
         elif message.content.endswith('purge'):
             names = await purge()
             await message.channel.send(f'purged {len(names)} users without roles: {names}')
-        elif message.content.endswith('regen-invite'):
-            await regen_fanbox_invite_post()
-            await message.channel.send(f'invite regenerated')
         elif 'test-id' in message.content:
             id = message.content.split()[-1]
-            fanbox_role = await get_fanbox_role_with_key(id)
-            fantia_role = await get_fantia_role_with_key(id)
-            await message.channel.send(f'fanbox {fanbox_role}, fantia {fantia_role}')
+            fanbox_role = await get_fanbox_role_with_pixiv_id(id)
+            await message.channel.send(f'fanbox {fanbox_role}')
         else:
             await message.channel.send('unknown command')
 
@@ -363,16 +320,21 @@ async def main(operator_mode):
             logging.exception(ex)
             await respond(message, 'system_error')
 
-    token = config.operator_token if operator_mode else config.discord_token
-
-    if config.cleanup.run:
-        periodic(cleanup, config.cleanup.period_hours * 60 * 60)
-
     try:
+        token = config.operator_token if operator_mode else config.discord_token
+
+        if config.cleanup.run:
+            periodic(cleanup, config.cleanup.period_hours * 60 * 60)
+
+        if config.auto_derole.run:
+            periodic(derole_check_all_fanbox_supporters, config.auto_derole.period_hours * 60 * 60)
+
         await client.start(token, reconnect=False)
     except Exception as ex:
         logging.exception(ex)
-    await client.close()
+    finally:
+        await client.close()
+        await db.close()
     delay = 10
     logging.warning(f'Disconnected: reconnecting in {delay}s')
     await asyncio.sleep(delay)
@@ -394,4 +356,3 @@ if __name__ == '__main__':
         p = mp.Process(target=run_main, daemon=True, args=(args.operator,))
         p.start()
         p.join()
-

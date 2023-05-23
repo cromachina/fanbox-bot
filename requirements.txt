@@ -2,3 +2,4 @@ discord.py==2.2.2
 httpx==0.22.0
 httpx_caching==0.1a2
 PyYAML==6.0
+aiosqlite==0.19.0
