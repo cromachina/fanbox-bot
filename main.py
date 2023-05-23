@@ -195,7 +195,7 @@ async def main(operator_mode):
         guild = client.guilds[0]
         async for member in guild.fetch_members(limit=None):
             await derole_check_fanbox_supporter(member)
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.25)
 
     async def get_fanbox_role_with_pixiv_id(pixiv_id):
         user_data = await get_fanbox_user_data(pixiv_id, force_update=True)
@@ -300,6 +300,11 @@ async def main(operator_mode):
     @client.event
     async def on_ready():
         logging.info(f'{client.user} has connected to Discord!')
+        if config.cleanup.run:
+            periodic(cleanup, config.cleanup.period_hours * 60 * 60)
+
+        if config.auto_derole.run:
+            periodic(derole_check_all_fanbox_supporters, config.auto_derole.period_hours * 60 * 60)
 
     @client.event
     async def on_message(message):
@@ -322,13 +327,6 @@ async def main(operator_mode):
 
     try:
         token = config.operator_token if operator_mode else config.discord_token
-
-        if config.cleanup.run:
-            periodic(cleanup, config.cleanup.period_hours * 60 * 60)
-
-        if config.auto_derole.run:
-            periodic(derole_check_all_fanbox_supporters, config.auto_derole.period_hours * 60 * 60)
-
         await client.start(token, reconnect=False)
     except Exception as ex:
         logging.exception(ex)
