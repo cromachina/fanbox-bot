@@ -91,10 +91,9 @@ def setup_logging(log_file):
 def load_config(config_file):
     with open(config_file, 'r', encoding='utf-8') as f:
         config = obj(yaml.load(f, Loader=yaml.Loader))
-        config.key_roles = make_roles_objects(config.key_roles)
         config.plan_roles = make_roles_objects(config.plan_roles)
         config.fallback_role = discord.Object(int(config.fallback_role))
-        config.all_roles = list(config.key_roles.values()) + list(config.plan_roles.values())
+        config.all_roles = list(config.plan_roles.values())
         config.cleanup = obj(config.cleanup)
         config.auto_derole = obj(config.auto_derole)
         config.session_cookies = str_values(config.session_cookies)
