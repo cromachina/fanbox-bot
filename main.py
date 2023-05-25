@@ -165,6 +165,12 @@ async def get_latest_fanbox_user_data(fanbox_client, db, pixiv_id, force_update=
     await update_user_data_db(db, pixiv_id, user_data)
     return user_data
 
+def has_role(member, roles):
+    for role in roles:
+        if member.get_role(role.id) is not None:
+            return True
+    return False
+
 async def main(operator_mode):
     config = load_config(config_file)
     setup_logging(config.log_file)
@@ -181,6 +187,8 @@ async def main(operator_mode):
 
     async def derole_check_fanbox_supporter(member:discord.Member):
         if len(member.roles) == 1:
+            return
+        if not has_role(member, config.all_roles):
             return
         pixiv_id = await get_member_pixiv_id(db, member)
         if pixiv_id is None or not is_user_fanbox_subscribed(await get_fanbox_user_data(pixiv_id)):
