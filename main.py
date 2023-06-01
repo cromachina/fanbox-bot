@@ -196,7 +196,7 @@ async def main(operator_mode):
                 await member.remove_roles(*config.all_roles)
             except:
                 pass
-            logging.info(f'Derole: {member}')
+            logging.info(f'Derole: {member} {pixiv_id}')
 
     async def derole_check_all_fanbox_supporters():
         guild = client.guilds[0]
