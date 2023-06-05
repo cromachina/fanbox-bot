@@ -209,7 +209,7 @@ async def main(operator_mode):
         user_data = await get_fanbox_user_data(pixiv_id)
         if is_user_active_supporting(user_data) or is_user_transaction_subscribed(user_data):
             return
-        derole_member(member, pixiv_id)
+        await derole_member(member, pixiv_id)
 
     async def derole_check_all_fanbox_supporters():
         guild = client.guilds[0]
