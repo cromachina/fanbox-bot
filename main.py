@@ -120,7 +120,12 @@ def compute_last_day(txns):
             stop_date = date + datetime.timedelta(days=days_in_month(date)) + diff
     return stop_date
 
-def is_user_fanbox_subscribed(user_data):
+def is_user_active_supporting(user_data):
+    if user_data is None:
+        return False
+    return user_data['supportingPlan'] is not None
+
+def is_user_transaction_subscribed(user_data):
     if user_data is None:
         return False
     txns = user_data['supportTransactions']
@@ -138,29 +143,32 @@ async def open_database():
 async def get_user_data_db(db, pixiv_id):
     cursor = await db.execute('select data from user_data where pixiv_id = ?', (pixiv_id,))
     user_data = await cursor.fetchone()
-    if user_data is not None:
-        user_data = json.loads(user_data[0])
-    return user_data
+    if user_data is None:
+        return None
+    return json.loads(user_data[0])
 
 async def update_user_data_db(db, pixiv_id, user_data):
-    if user_data is not None:
-        await db.execute('replace into user_data values(?, ?)', (pixiv_id, json.dumps(user_data)))
-        await db.commit()
+    if user_data is None:
+        return
+    await db.execute('replace into user_data values(?, ?)', (pixiv_id, json.dumps(user_data)))
+    await db.commit()
 
 async def get_member_pixiv_id(db, member:discord.Member):
     cursor = await db.execute('select pixiv_id from member_pixiv where member_id = ?', (member.id,))
     result = await cursor.fetchone()
-    if result is not None:
-        result = result[0]
-    return result
+    if result is None:
+        return None
+    return result[0]
 
 async def update_member_pixiv_id(db, member:discord.Member, pixiv_id):
     await db.execute('replace into member_pixiv values(?, ?)', (member.id, pixiv_id))
     await db.commit()
 
 async def get_latest_fanbox_user_data(fanbox_client, db, pixiv_id, force_update=False):
+    if pixiv_id is None:
+        return None
     user_data = await get_user_data_db(db, pixiv_id)
-    if force_update or not is_user_fanbox_subscribed(user_data):
+    if force_update or not is_user_transaction_subscribed(user_data):
         user_data = await fanbox_client.get_user(pixiv_id)
     await update_user_data_db(db, pixiv_id, user_data)
     return user_data
@@ -185,18 +193,23 @@ async def main(operator_mode):
     async def get_fanbox_user_data(pixiv_id, force_update=False):
         return await get_latest_fanbox_user_data(fanbox_client, db, pixiv_id, force_update)
 
+    async def derole_member(member, pixiv_id):
+        try:
+            await member.remove_roles(*config.all_roles)
+        except:
+            pass
+        logging.info(f'Derole: {member} {pixiv_id}')
+
     async def derole_check_fanbox_supporter(member:discord.Member):
         if len(member.roles) == 1:
             return
         if not has_role(member, config.all_roles):
             return
         pixiv_id = await get_member_pixiv_id(db, member)
-        if pixiv_id is None or not is_user_fanbox_subscribed(await get_fanbox_user_data(pixiv_id)):
-            try:
-                await member.remove_roles(*config.all_roles)
-            except:
-                pass
-            logging.info(f'Derole: {member} {pixiv_id}')
+        user_data = await get_fanbox_user_data(pixiv_id)
+        if is_user_active_supporting(user_data) or is_user_transaction_subscribed(user_data):
+            return
+        derole_member(member, pixiv_id)
 
     async def derole_check_all_fanbox_supporters():
         guild = client.guilds[0]
@@ -207,12 +220,10 @@ async def main(operator_mode):
         user_data = await get_fanbox_user_data(pixiv_id, force_update=True)
         if not user_data:
             return None
-        if not is_user_fanbox_subscribed(user_data):
-            return None
-        elif user_data['supportingPlan']:
+        elif is_user_active_supporting(user_data):
             return config.plan_roles.get(user_data['supportingPlan']['id'])
-        elif config.allow_fallback:
-            return config.fallback_role if len(user_data['supportTransactions']) != 0 else None
+        elif config.allow_fallback and is_user_transaction_subscribed(user_data):
+            return config.fallback_role
         else:
             return None
 
