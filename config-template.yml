@@ -1,14 +1,13 @@
 # Bot access token for discord.
-# [SECURITY] These bot tokens should be treated like secrets as they allow the
-# bot program to connect to Discord servers.
+# [SECURITY] These bot tokens should be treated like secrets as they allow the bot program to connect to Discord servers.
 discord_token: <DISCORD_BOT_TOKEN>
 
 # This is for testing out commands with another bot, optional.
 operator_token: <DISCORD_OPERATOR_BOT_TOKEN>
 
 # ID of the user to use admin commands.
-# This must be a number, like 12345. You can get this by turning on developer
-# mode in Discord, right clicking on your name, and select "Copy ID".
+# This must be a number, like 12345.
+# To get your Discord ID, turn on developer mode in Discord, right click on your name, and select "Copy ID".
 admin_id: <DISCORD_ADMIN_ID>
 
 # File to log system information to
@@ -19,7 +18,11 @@ rate_limit: 60
 
 # Add plans IDs and their associated role IDs here.
 # The plan ID number on the left hand side must be a string, like '12345', and not 12345
+# To get your plan ID, go to https://www.fanbox.cc/manage/plans, then click edit on the plan.
+# The plan ID will be in the address bar. Replace '12345' with your own plan ID.
 # <ROLE_ID> must be a number, same as above.
+# To get the role ID, turn on developer mode in Discord, go to your server settings, then Roles,
+# then right click on the role and select "Copy Role ID"
 plan_roles:
   '12345': <ROLE_ID>
 
@@ -53,17 +56,17 @@ system_messages:
   access_granted: "Access granted. Please check the server for new channels!\nアクセスが許可されました。新しいチャンネルがないか、サーバーをチェックしてみてください！"
   system_error: "An error has occurred! The admin has been notified to fix it.\nエラーが発生しました！管理者が修正するように通知されています。"
 
-# Update these with cookies from your FANBOX page. Needed to contact the FANBOX API.
+# Update these with cookies from your FANBOX page. These are needed to contact the FANBOX API.
+# To access your cookies with Chrome: Go to your FANBOX page -> Ctrl+Shift+J -> Application -> Cookies -> https://www.fanbox.cc
 # All values filled in must be strings, so if it's a number, you must 'quote' it, like '12345'.
-# [SECURITY] The values here should be treated like secrets, because they allow the bot
-# to act on your behalf on FANBOX.
+# [SECURITY] The values here should be treated like secrets, because they allow the bot to act on your behalf on FANBOX.
 session_cookies:
+  p_ab_id_id: <P_AB_ID_ID>
+  FANBOXSESSID: <FANBOX_SESSION_ID>
   p_ab_id: '2'
   p_ab_id_2: '5'
-  p_ab_id_id: <P_AB_ID_ID>
   privacy_policy_notification: '0'
   privacy_policy_agreement: '3'
-  FANBOXSESSID: <FANBOX_SESSION_ID>
 
 # Do not change unless you know what you are doing. Needed to contact the FANBOX API.
 session_headers:
