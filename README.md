@@ -15,6 +15,7 @@ The bot can periodically derole users that have passed the last day of their pur
 
 ## Admin commands
 Admin commands are prefixed with `!`, for example `!reset`
+- `add-user PIXIV_ID DISCORD_ID` attempt to grant access for another user. `DISCORD_ID` is the numerical ID of a user, not their user name.
 - `reset` removes all roles in your config from all users. Any other roles will be ignored.
 - `purge` manually runs the user purge. Any user with no roles will be kicked from the server.
 - `test-id PIXIV_ID` tests if a pixiv ID can obtain a role at this moment in time. I use this for debugging.

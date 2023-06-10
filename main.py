@@ -13,7 +13,7 @@ import discord
 import httpx
 import httpx_caching
 import yaml
-from discord.flags import Intents
+from discord.ext import commands
 
 config_file = 'config.yml'
 registry_db = 'registry.db'
@@ -185,7 +185,7 @@ async def main(operator_mode):
     rate_limit_table = {}
     intents = discord.Intents.default()
     intents.members = True
-    client = discord.Client(intents=intents)
+    client = commands.bot.Bot(command_prefix='!', intents=intents)
     fanbox_client = FanboxClient(config.session_cookies, config.session_headers)
     lock = asyncio.Lock()
     db = await open_database()
@@ -262,10 +262,9 @@ async def main(operator_mode):
         await message.channel.send(config.system_messages[condition].format(**kwargs))
 
     async def handle_access(message):
-        guild = None
+        guild = client.guilds[0]
         member = None
 
-        guild = client.guilds[0]
         try:
             member = await guild.fetch_member(message.author.id)
         except:
@@ -300,19 +299,49 @@ async def main(operator_mode):
 
         await respond(message, 'access_granted')
 
-    async def handle_admin(message):
-        if message.content.endswith('reset'):
-            count = await reset()
-            await message.channel.send(f'removed roles from {count} users')
-        elif message.content.endswith('purge'):
-            names = await purge()
-            await message.channel.send(f'purged {len(names)} users without roles: {names}')
-        elif 'test-id' in message.content:
-            id = message.content.split()[-1]
-            fanbox_role = await get_fanbox_role_with_pixiv_id(id)
-            await message.channel.send(f'fanbox {fanbox_role}')
-        else:
-            await message.channel.send('unknown command')
+    @client.command(name='add-user')
+    async def add_user(ctx, pixiv_id, discord_id):
+        guild = client.guilds[0]
+        member = None
+
+        try:
+            member = await guild.fetch_member(discord_id)
+        except:
+            pass
+
+        if not member:
+            await ctx.send(f'{discord_id} is not in the server.')
+            return
+
+        role = await get_fanbox_role_with_pixiv_id(pixiv_id)
+
+        if not role:
+            await ctx.send(f'{member} access denied.')
+            return
+
+        await update_member_pixiv_id(db, member, pixiv_id)
+
+        async with lock:
+            if config.clear_roles:
+                await member.remove_roles(*config.all_roles)
+            await member.add_roles(role)
+
+        await ctx.send(f'{member} access granted.')
+
+    @client.command(name='reset')
+    async def _reset(ctx):
+        count = await reset()
+        await ctx.send(f'removed roles from {count} users')
+
+    @client.command(name='purge')
+    async def _purge(ctx):
+        names = await purge()
+        await ctx.send(f'purged {len(names)} users without roles: {names}')
+
+    @client.command(name='test-id')
+    async def test_id(ctx, id):
+        fanbox_role = await get_fanbox_role_with_pixiv_id(id)
+        await ctx.send(f'{fanbox_role}')
 
     @client.event
     async def on_ready():
@@ -333,8 +362,8 @@ async def main(operator_mode):
         try:
             if operator_mode and message.author.id != config.admin_id:
                 return
-            if (message.author.id == config.admin_id and message.content.startswith('!')):
-                await handle_admin(message)
+            if message.author.id == config.admin_id and message.content.startswith('!'):
+                await client.process_commands(message)
             else:
                 await handle_access(message)
 
