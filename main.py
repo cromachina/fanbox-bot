@@ -153,14 +153,14 @@ async def update_user_data_db(db, pixiv_id, user_data):
     await db.execute('replace into user_data values(?, ?)', (pixiv_id, json.dumps(user_data)))
     await db.commit()
 
-async def get_member_pixiv_id(db, member:discord.Member):
+async def get_member_pixiv_id_db(db, member:discord.Member):
     cursor = await db.execute('select pixiv_id from member_pixiv where member_id = ?', (member.id,))
     result = await cursor.fetchone()
     if result is None:
         return None
     return result[0]
 
-async def update_member_pixiv_id(db, member:discord.Member, pixiv_id):
+async def update_member_pixiv_id_db(db, member:discord.Member, pixiv_id):
     await db.execute('replace into member_pixiv values(?, ?)', (member.id, pixiv_id))
     await db.commit()
 
@@ -205,7 +205,7 @@ async def main(operator_mode):
             return
         if not has_role(member, config.all_roles):
             return
-        pixiv_id = await get_member_pixiv_id(db, member)
+        pixiv_id = await get_member_pixiv_id_db(db, member)
         user_data = await get_fanbox_user_data(pixiv_id)
         if is_user_active_supporting(user_data) or is_user_transaction_subscribed(user_data):
             return
@@ -290,7 +290,7 @@ async def main(operator_mode):
             await respond(message, 'access_denied', id=pixiv_id)
             return
 
-        await update_member_pixiv_id(db, member, pixiv_id)
+        await update_member_pixiv_id_db(db, member, pixiv_id)
 
         async with lock:
             if config.clear_roles:
@@ -319,7 +319,7 @@ async def main(operator_mode):
             await ctx.send(f'{member} access denied.')
             return
 
-        await update_member_pixiv_id(db, member, pixiv_id)
+        await update_member_pixiv_id_db(db, member, pixiv_id)
 
         async with lock:
             if config.clear_roles:
