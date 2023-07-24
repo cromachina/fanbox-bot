@@ -26,6 +26,9 @@ rate_limit: 60
 plan_roles:
   '12345': <ROLE_ID>
 
+# Disallow multiple users from using the same Pixiv ID.
+strict_access: False
+
 # Allow an unsubscribed user to get access if they have subscribed before.
 allow_fallback: False
 # This must be a number, same as above.
@@ -53,6 +56,7 @@ system_messages:
   rate_limited: "Rate limited, please wait {rate_limit} seconds.\nレートが制限されていますので、{rate_limit}秒お待ちください。"
   no_id_found: "Cannot detect a user ID in your message.\nメッセージ内のユーザーIDを検出できません。"
   access_denied: "Access denied for ID {id}.\nID{id}に対してアクセスが拒否されました。"
+  id_bound: "Access denied. ID {id} is already bound to another user. Please contact the admin for assistance.\nアクセスが拒否されました。ID{id}はすでに別のユーザーにバインドされています。管理者にお問い合わせください。"
   access_granted: "Access granted. Please check the server for new channels!\nアクセスが許可されました。新しいチャンネルがないか、サーバーをチェックしてみてください！"
   system_error: "An error has occurred! The admin has been notified to fix it.\nエラーが発生しました！管理者が修正するように通知されています。"
 

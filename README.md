@@ -8,6 +8,8 @@ When a Discord user sends the bot their Pixiv ID number, it is checked against t
 
 When `allow_fallback` is set to `True` and `fallback_role` is configured, the bot will try to determine if the unsubscribed Fanbox user had subscribed in the past, and then assign a default role to them. Because details of which Fanbox plan was purchased is not available from the API, we cannot precisely determine which role to assign. This is fine if you only have one role to assign.
 
+When `strict_access` is set to `True`, the bot will disallow users from using the same Pixiv ID. When a user successfully authenticates, their Discord ID is "bound" to their Pixiv ID. Successfully authenticating again will update their Pixiv ID binding. The user can only be unbound by an admin command. Some users may have had to create new Discord accounts, therefore the you will have to manually resolve unbinding of their old account.
+
 ## Other functionality
 The bot can be configured to periodically purge old users without roles. See `cleanup` in the config.
 
@@ -15,8 +17,12 @@ The bot can periodically derole users that have passed the last day of their pur
 
 ## Admin commands
 Admin commands are prefixed with `!`, for example `!reset`
-- `add-user PIXIV_ID DISCORD_ID` attempt to grant access for another user. `DISCORD_ID` is the numerical ID of a user, not their user name.
-- `reset` removes all roles in your config from all users. Any other roles will be ignored.
+- `add-user PIXIV_ID DISCORD_ID` attempt to grant access for another user. `DISCORD_ID` is the numerical ID of a user, not their user name. This command ignores `strict_access`.
+- `unbind-user-by-discord-id DISCORD_ID` remove a user's Pixiv ID binding and roles.
+- `unbind-user-by-pixiv-id PIXIV_ID` unbind all users sharing the same Pixiv ID.
+- `get-by-discord-id DISCORD_ID` get the Pixiv ID bound to the given user.
+- `get-by-pixiv-id PIXIV_ID` get all users using the same Pixiv ID.
+- `reset` removes all roles in your config from all users. Any other roles will be ignored. Unbinds all users.
 - `purge` manually runs the user purge. Any user with no roles will be kicked from the server.
 - `test-id PIXIV_ID` tests if a pixiv ID can obtain a role at this moment in time. I use this for debugging.
 
@@ -35,6 +41,7 @@ Admin commands are prefixed with `!`, for example `!reset`
 - Copy `config-template.yml` to `config.yml`
 - In `config.yml`, update all of the places with angle brackets: `<...>`
   - For example: `<ROLE_ID>` becomes `12345`, but not `<12345>` (remove the brackets).
+  - If you are not using a particular feature (like `fallback_role`), you can fill it in with a dummy value, like `0`.
 - You can change any other default fields in `config.yml` as well to turn on other functionality.
 - Run `python3 main.py`
 - The bot must be running continually to service random requests and run periodic functions. If you do not have a continually running computer, then I recommend renting a lightweight VM on a cloud service (Google Cloud, AWS, etc.) to host your bot instance.

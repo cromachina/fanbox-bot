@@ -140,6 +140,11 @@ async def open_database():
     await db.execute('create table if not exists member_pixiv (member_id integer not null primary key, pixiv_id integer)')
     return db
 
+async def reset_bindings_db(db):
+    db.execute('delete from member_pixiv')
+    db.execute('vacuum')
+    db.commit()
+
 async def get_user_data_db(db, pixiv_id):
     cursor = await db.execute('select data from user_data where pixiv_id = ?', (pixiv_id,))
     user_data = await cursor.fetchone()
@@ -153,15 +158,24 @@ async def update_user_data_db(db, pixiv_id, user_data):
     await db.execute('replace into user_data values(?, ?)', (pixiv_id, json.dumps(user_data)))
     await db.commit()
 
-async def get_member_pixiv_id_db(db, member:discord.Member):
-    cursor = await db.execute('select pixiv_id from member_pixiv where member_id = ?', (member.id,))
+async def get_member_pixiv_id_db(db, member_id):
+    cursor = await db.execute('select pixiv_id from member_pixiv where member_id = ?', (member_id,))
     result = await cursor.fetchone()
     if result is None:
         return None
     return result[0]
 
-async def update_member_pixiv_id_db(db, member:discord.Member, pixiv_id):
-    await db.execute('replace into member_pixiv values(?, ?)', (member.id, pixiv_id))
+async def update_member_pixiv_id_db(db, member_id, pixiv_id):
+    await db.execute('replace into member_pixiv values(?, ?)', (member_id, pixiv_id))
+    await db.commit()
+
+async def get_members_by_pixiv_id_db(db, pixiv_id):
+    cursor = await db.execute('select member_id from member_pixiv where pixiv_id = ?', (pixiv_id,))
+    result = await cursor.fetchall()
+    return [r[0] for r in result]
+
+async def delete_member_db(db, member_id):
+    await db.execute('delete from member_pixiv where member_id = ?', (member_id,))
     await db.commit()
 
 async def get_latest_fanbox_user_data(fanbox_client, db, pixiv_id, force_update=False):
@@ -190,10 +204,18 @@ async def main(operator_mode):
     lock = asyncio.Lock()
     db = await open_database()
 
+    async def fetch_member(discord_id):
+        try:
+            return await client.guilds[0].fetch_member(discord_id)
+        except:
+            return None
+
     async def get_fanbox_user_data(pixiv_id, force_update=False):
         return await get_latest_fanbox_user_data(fanbox_client, db, pixiv_id, force_update)
 
     async def derole_member(member, pixiv_id):
+        if member is None:
+            return
         try:
             await member.remove_roles(*config.all_roles)
         except:
@@ -205,7 +227,7 @@ async def main(operator_mode):
             return
         if not has_role(member, config.all_roles):
             return
-        pixiv_id = await get_member_pixiv_id_db(db, member)
+        pixiv_id = await get_member_pixiv_id_db(db, member.id)
         user_data = await get_fanbox_user_data(pixiv_id)
         if is_user_active_supporting(user_data) or is_user_transaction_subscribed(user_data):
             return
@@ -234,6 +256,7 @@ async def main(operator_mode):
             async for member in guild.fetch_members(limit=None):
                 await member.remove_roles(*config.all_roles)
                 count += 1
+            await reset_bindings_db(db)
             return count
 
     def is_old_member(joined_at):
@@ -262,13 +285,7 @@ async def main(operator_mode):
         await message.channel.send(config.system_messages[condition].format(**kwargs))
 
     async def handle_access(message):
-        guild = client.guilds[0]
-        member = None
-
-        try:
-            member = await guild.fetch_member(message.author.id)
-        except:
-            pass
+        member = await fetch_member(message.author.id)
 
         if not member:
             logging.info(f'User: {message.author}; Message: "{message.content}"; Not a member, ignored')
@@ -284,13 +301,19 @@ async def main(operator_mode):
             await respond(message, 'no_id_found')
             return
 
+        if config.strict_access:
+            members = await get_members_by_pixiv_id_db(db, pixiv_id)
+            if members and member.id not in members:
+                await respond(message, 'id_bound', id=pixiv_id)
+                return
+
         role = await get_fanbox_role_with_pixiv_id(pixiv_id)
 
         if not role:
             await respond(message, 'access_denied', id=pixiv_id)
             return
 
-        await update_member_pixiv_id_db(db, member, pixiv_id)
+        await update_member_pixiv_id_db(db, member.id, pixiv_id)
 
         async with lock:
             if config.clear_roles:
@@ -301,13 +324,7 @@ async def main(operator_mode):
 
     @client.command(name='add-user')
     async def add_user(ctx, pixiv_id, discord_id):
-        guild = client.guilds[0]
-        member = None
-
-        try:
-            member = await guild.fetch_member(discord_id)
-        except:
-            pass
+        member = await fetch_member(discord_id)
 
         if not member:
             await ctx.send(f'{discord_id} is not in the server.')
@@ -319,7 +336,7 @@ async def main(operator_mode):
             await ctx.send(f'{member} access denied.')
             return
 
-        await update_member_pixiv_id_db(db, member, pixiv_id)
+        await update_member_pixiv_id_db(db, member.id, pixiv_id)
 
         async with lock:
             if config.clear_roles:
@@ -327,6 +344,36 @@ async def main(operator_mode):
             await member.add_roles(role)
 
         await ctx.send(f'{member} access granted.')
+
+    @client.command(name='unbind-user-by-discord-id')
+    async def unbind_user_by_discord_id(ctx, discord_id):
+        pixiv_id = await get_member_pixiv_id_db(db, discord_id)
+        await delete_member_db(db, discord_id)
+        member = await fetch_member(discord_id)
+        await derole_member(member, pixiv_id)
+        if member is not None:
+            member = member.name
+        await ctx.send(f'unbound user {(discord_id, member)} with pixiv_id {pixiv_id}')
+
+    @client.command(name='unbind-user-by-pixiv-id')
+    async def unbind_user_by_pixiv_id(ctx, pixiv_id):
+        member_ids = await get_members_by_pixiv_id_db(db, pixiv_id)
+        for member_id in member_ids:
+            await unbind_user_by_discord_id(ctx, member_id)
+
+    @client.command(name='get-by-discord-id')
+    async def get_by_discord_id(ctx, discord_id):
+        member = await fetch_member(discord_id)
+        if member is not None:
+            member = member.name
+        pixiv_id = await get_member_pixiv_id_db(db, discord_id)
+        await ctx.send(f'member {(discord_id, member)} pixiv_id {pixiv_id}')
+
+    @client.command(name='get-by-pixiv-id')
+    async def get_by_pixiv_id(ctx, pixiv_id):
+        member_ids = await get_members_by_pixiv_id_db(db, pixiv_id)
+        for member_id in member_ids:
+            await get_by_discord_id(ctx, member_id)
 
     @client.command(name='reset')
     async def _reset(ctx):
