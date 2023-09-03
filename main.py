@@ -29,7 +29,10 @@ def periodic(func, timeout):
     async def run():
         while True:
             try:
-                await func()
+                await asyncio.wait_for(func(), timeout=timeout)
+            except asyncio.TimeoutError as ex:
+                logging.exception(ex)
+                continue
             except Exception as ex:
                 logging.exception(ex)
             await asyncio.sleep(timeout)
