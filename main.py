@@ -28,7 +28,10 @@ class obj:
 def periodic(func, timeout):
     async def run():
         while True:
-            await func()
+            try:
+                await func()
+            except Exception as ex:
+                logging.exception(ex)
             await asyncio.sleep(timeout)
     task = asyncio.create_task(run())
     periodic_tasks.append(task)
