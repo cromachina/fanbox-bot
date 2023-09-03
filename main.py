@@ -238,8 +238,12 @@ async def main(operator_mode):
 
     async def derole_check_all_fanbox_supporters():
         guild = client.guilds[0]
+        logging.info(f'Begin derole check: {guild.member_count} members')
+        count = 0
         async for member in guild.fetch_members(limit=None):
             await derole_check_fanbox_supporter(member)
+            count += 1
+        logging.info(f'End derole check: {count} checked')
 
     async def get_fanbox_role_with_pixiv_id(pixiv_id):
         user_data = await get_fanbox_user_data(pixiv_id, force_update=True)
