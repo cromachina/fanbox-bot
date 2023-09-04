@@ -45,13 +45,27 @@ def get_payload(response, check_error=True):
         raise Exception('Fanbox API error', response, response.text)
     return json.loads(response.text)['body']
 
+class RateLimiter():
+    def __init__(self, rate_limit_seconds):
+        self.limit_lock = asyncio.Lock()
+        self.rate_limit = rate_limit_seconds
+        self.last_time = time.time() - self.rate_limit
+
+    async def limit(self, task):
+        async with self.limit_lock:
+            await asyncio.sleep(max(self.last_time - time.time() + self.rate_limit, 0))
+            result = await task
+            self.last_time = time.time()
+            return result
+
 class FanboxClient:
     def __init__(self, cookies, headers) -> None:
+        self.rate_limiter = RateLimiter(5)
         self.client = httpx.AsyncClient(base_url='https://api.fanbox.cc/', cookies=cookies, headers=headers)
         self.client = httpx_caching.CachingClient(self.client)
 
     async def get_user(self, user_id):
-        response = await self.client.get('legacy/manage/supporter/user', params={'userId': user_id})
+        response = await self.rate_limiter.limit(self.client.get('legacy/manage/supporter/user', params={'userId': user_id}))
         if response.is_error:
             return None
         return get_payload(response, check_error=False)
@@ -244,8 +258,11 @@ async def main(operator_mode):
         logging.info(f'Begin derole check: {guild.member_count} members')
         count = 0
         async for member in guild.fetch_members(limit=None):
-            await derole_check_fanbox_supporter(member)
-            count += 1
+            try:
+                await derole_check_fanbox_supporter(member)
+                count += 1
+            except Exception as ex:
+                logging.exception(ex)
         logging.info(f'End derole check: {count} checked')
 
     async def get_fanbox_role_with_pixiv_id(pixiv_id):
