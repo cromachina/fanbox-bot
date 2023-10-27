@@ -13,7 +13,11 @@ When `strict_access` is set to `True`, the bot will disallow users from using th
 ## Other functionality
 The bot can be configured to periodically purge old users without roles. See `cleanup` in the config.
 
-The bot can periodically derole users that have passed the last day of their purchased Fanbox subscription. See `auto_derole` in the config.
+The bot can periodically derole users that have passed the last day of their purchased Fanbox subscription. See `auto_derole` in the config. The last day is appropraitely calculated such that a user will get a month of access time, cumulatively, from the last transaction that occurs in a specific month; Example: If a user had transactions on 6/15, 7/1, and 8/1, then the last day of their subscription is approximately 9/15.
+
+ `auto_derole` cannot differentiate between roles or what specific plan the user was subscribed to, so if you have roles based on different plans, they will not be switched between (either the user is subscribed or not subscribed). This limitation is the same as `allow_fallback`.
+
+If you are using an older version of the bot without `auto_derole`, and want to update to a newer version with the feature, then all of your users will be deroled immediately when you run the bot, unless you migrate the database first. Typically this is not an issue, as users can simply send their Pixiv ID to the bot to get the role again. If you want to perform a migration without lots of deroles occurring, run `dbmig.py` first (it can take a while to run), then start the bot with `auto_derole` enabled.
 
 ## Admin commands
 Admin commands are prefixed with `!`, for example `!reset`
