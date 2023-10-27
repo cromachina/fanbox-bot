@@ -40,11 +40,6 @@ def periodic(func, timeout):
     periodic_tasks.append(task)
     return task
 
-def get_payload(response, check_error=True):
-    if check_error and response.is_error:
-        raise Exception('Fanbox API error', response, response.text)
-    return json.loads(response.text)['body']
-
 class RateLimiter():
     def __init__(self, rate_limit_seconds):
         self.limit_lock = asyncio.Lock()
@@ -67,8 +62,11 @@ class FanboxClient:
     async def get_user(self, user_id):
         response = await self.rate_limiter.limit(self.client.get('legacy/manage/supporter/user', params={'userId': user_id}))
         if response.is_error:
-            return None
-        return get_payload(response, check_error=False)
+            if response.status_code == 401:
+                raise Exception('Fanbox API reports 401 Unauthorized. session_cookies in the config file has likely been invalidated and needs to be updated. Restart the bot after updating.')
+            else:
+                return None
+        return json.loads(response.text)['body']
 
 def map_dict(a, f):
     b = {}
@@ -222,7 +220,7 @@ async def main(operator_mode):
     client = commands.bot.Bot(command_prefix='!', intents=intents)
     fanbox_client = FanboxClient(config.session_cookies, config.session_headers)
     lock = asyncio.Lock()
-    db = await open_database()
+    db = None
 
     async def fetch_member(discord_id):
         try:
@@ -418,6 +416,11 @@ async def main(operator_mode):
         await ctx.send(f'{fanbox_role}')
 
     @client.event
+    async def on_command_error(ctx, error):
+        logging.error(error)
+        await ctx.send(error)
+
+    @client.event
     async def on_ready():
         logging.info(f'{client.user} has connected to Discord!')
         if config.cleanup.run:
@@ -446,6 +449,7 @@ async def main(operator_mode):
             await respond(message, 'system_error')
 
     try:
+        db = await open_database()
         token = config.operator_token if operator_mode else config.discord_token
         await client.start(token, reconnect=False)
     except Exception as ex:
