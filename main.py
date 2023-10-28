@@ -418,13 +418,8 @@ async def main(operator_mode):
 
     @client.command(name='test-id')
     async def test_id(ctx, id):
-        fanbox_role = await get_fanbox_role_with_pixiv_id(id)
-        await ctx.send(f'{fanbox_role}')
-
-    @client.event
-    async def on_command_error(ctx, error):
-        logging.error(error)
-        await ctx.send(error)
+        role = await get_fanbox_role_with_pixiv_id(id)
+        await ctx.send(f'Role: {role}')
 
     @client.event
     async def on_ready():
