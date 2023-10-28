@@ -89,7 +89,7 @@ def str_values(d):
 
 def update_rate_limited(user_id, rate_limit, rate_limit_table):
     now = time.time()
-    time_gate = rate_limit_table.get(user_id) or 0
+    time_gate = rate_limit_table.get(user_id, 0)
     if now > time_gate:
         rate_limit_table[user_id] = now + rate_limit
         return False
