@@ -56,17 +56,23 @@ class RateLimiter():
 class FanboxClient:
     def __init__(self, cookies, headers) -> None:
         self.rate_limiter = RateLimiter(5)
+        self.self_id = cookies['FANBOXSESSID'].split('_')[0]
         self.client = httpx.AsyncClient(base_url='https://api.fanbox.cc/', cookies=cookies, headers=headers)
         self.client = httpx_caching.CachingClient(self.client)
 
-    async def get_user(self, user_id):
-        response = await self.rate_limiter.limit(self.client.get('legacy/manage/supporter/user', params={'userId': user_id}))
+    async def get_payload(self, request):
+        response = await self.rate_limiter.limit(request)
+        if response.status_code == 401:
+            raise Exception('Fanbox API reports 401 Unauthorized. session_cookies in the config file has likely been invalidated and needs to be updated. Restart the bot after updating.')
         if response.is_error:
-            if response.status_code == 401:
-                raise Exception('Fanbox API reports 401 Unauthorized. session_cookies in the config file has likely been invalidated and needs to be updated. Restart the bot after updating.')
-            else:
-                return None
+            return None
         return json.loads(response.text)['body']
+
+    async def get_user(self, user_id):
+        return await self.get_payload(self.client.get('legacy/manage/supporter/user', params={'userId': user_id}))
+
+    async def get_plans(self):
+        return await self.get_payload(self.client.get('plan.listCreator', params={'userId': self.self_id}))
 
 def map_dict(a, f):
     b = {}
