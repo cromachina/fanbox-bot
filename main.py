@@ -17,7 +17,7 @@ from discord.ext import commands
 
 config_file = 'config.yml'
 registry_db = 'registry.db'
-fanbox_id_prog = re.compile('(\d+)')
+fanbox_id_prog = re.compile('(\\d+)')
 periodic_tasks = []
 
 class obj:
