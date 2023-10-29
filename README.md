@@ -6,18 +6,30 @@ The bot accesses the Fanbox API using your Fanbox session token. This is found i
 ## Access control
 When a Discord user sends the bot their Pixiv ID number, it is checked against their Fanbox transaction records, which will grant appropriate access. You can simply tell the users to message their Pixiv profile link to the bot, for example `https://www.pixiv.net/users/11`, which will extract `11` and check that ID.
 
-When `allow_fallback` is set to `True` and `fallback_role` is configured, the bot will try to determine if the unsubscribed Fanbox user had subscribed in the past, and then assign a default role to them. Because details of which Fanbox plan was purchased is not available from the API, we cannot precisely determine which role to assign. This is fine if you only have one role to assign.
-
 When `strict_access` is set to `True`, the bot will disallow users from using the same Pixiv ID. When a user successfully authenticates, their Discord ID is "bound" to their Pixiv ID. Successfully authenticating again will update their Pixiv ID binding. The user can only be unbound by an admin command. Some users may have had to create new Discord accounts, therefore the you will have to manually resolve unbinding of their old account.
 
 ## Other functionality
+
+### Auto Purge
 The bot can be configured to periodically purge old users without roles. See `cleanup` in the config.
 
-The bot can periodically derole users that have passed the last day of their purchased Fanbox subscription. See `auto_derole` in the config. The last day is appropraitely calculated such that a user will get a month of access time, cumulatively, from the last transaction that occurs in a specific month; Example: If a user had transactions on 6/15, 7/1, and 8/1, then the last day of their subscription is approximately 9/15.
+### Auto Role Update
+The bot can be configured to periodically update a user's role based on their Fanbox subscription. See `auto_role_update` in the config. The subscription is checked whenever the bot thinks the subscription is going to change. Because this is based on the last cached data of the user, if the user wants their role to be updated immediately (such as to a higher role), then they need to submit their Pixiv ID to the bot again.
 
- `auto_derole` cannot differentiate between roles or what specific plan the user was subscribed to, so if you have roles based on different plans, they will not be switched between (either the user is subscribed or not subscribed). This limitation is the same as `allow_fallback`.
+#### Period of role assignment
+The bot will make the best effort to assign the correct role based on the user's previous recent transactions, as well as ensure that they get to retain the role for the contiguous overflow days since making those transactions. For example: If a user had subscribed on 6/15, 7/1, and 8/1, then the last day of their subscription is approximately 9/15.
 
-If you are using an older version of the bot without `auto_derole`, and want to update to a newer version with the feature, then all of your users will be deroled immediately when you run the bot, unless you migrate the database first. Typically this is not an issue, as users can simply send their Pixiv ID to the bot to get the role again. If you want to perform a migration without lots of deroles occurring, run `dbmig.py` first (it can take a while to run), then start the bot with `auto_derole` enabled.
+#### Determining role assignment
+The highest role assigned is determined like so: A calendar month's transactions for a user are summed up and replaced by the last transaction in that month, so if they had two 500 yen transactions on 6/10 and 6/15, then this would be represented by one 1000 yen transaction on 6/15. Then, for contiguous months of transactions, the days in that period of time are filled starting with the highest roles first, for a month worth of time, in the positions each transaction starts, or the next available position that can be filled. This is easier to demonstrate with the following graphs:
+
+#### Why transactions?
+Transactions are used to determine roles because this is the only historical information that the Fanbox API provides. Unfortunately Fanbox does not provide what specific plan was purchased with a given transaction, which makes determining which role to assign more complicated. This also means that plans should be uniquely determined by their price.
+
+#### Adding or removing plans from Fanbox
+Each time the bot starts, plans are retrieved from Fanbox and cached. If you removed a plan from your Fanbox, you should still keep the plan in your `plan_roles` setting so that a user can still be granted the last valid role that plan represented. When no more users have that role, you could then remove that plan from the `plan_roles` setting without impacting user experience.
+
+### Database Migration
+If you are using an older version of the bot without `auto_role_update`, and want to update to a newer version with the feature, then all of your users will be deroled immediately when you run the bot, unless you migrate the database first. Typically this is not an issue, as users can simply send their Pixiv ID to the bot to get the role again. If you want to perform a migration without lots of deroles occurring, run `dbmig.py` first (it can take a while to run), then start the bot with `auto_role_update` enabled.
 
 ## Admin commands
 Admin commands are prefixed with `!`, for example `!reset`
@@ -41,11 +53,19 @@ Admin commands are prefixed with `!`, for example `!reset`
 - Download and extract this repository to a new directory.
 - Open a command window in the directory where you downloaded this repository.
   - If you are using Windows, navigate to the target directory in File Explorer, then type `cmd` in the address bar and hit enter to open a command window there.
-- Run `pip install -r requirements.txt` to install dependencies. Run again after pulling latest code to update dependencies.
+- Run `pip install -r requirements.txt` to install dependencies.
 - Copy `config-template.yml` to `config.yml`
 - In `config.yml`, update all of the places with angle brackets: `<...>`
   - For example: `<ROLE_ID>` becomes `12345`, but not `<12345>` (remove the brackets).
-  - If you are not using a particular feature (like `fallback_role`), you can fill it in with a dummy value, like `0`.
+  - If you are not using a particular feature, you can fill it in with a dummy value, like `0`.
 - You can change any other default fields in `config.yml` as well to turn on other functionality.
 - Run `python3 main.py`
 - The bot must be running continually to service random requests and run periodic functions. If you do not have a continually running computer, then I recommend renting a lightweight VM on a cloud service (Google Cloud, AWS, etc.) to host your bot instance.
+
+## Updating from a previous version
+- Stop the bot.
+- Get the latest version of the repository.
+- Run `pip install -r requirements.txt` again to install any new or changed dependencies.
+- Redo the steps for copying the config template, because the config may have changed.
+- Run the `dbmig.py` script to completion if appropriate (see `Database Migration` above for details).
+- Start the bot.
