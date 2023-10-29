@@ -188,6 +188,7 @@ async def open_database():
     db = await aiosqlite.connect(registry_db)
     await db.execute('create table if not exists user_data (pixiv_id integer not null primary key, data text)')
     await db.execute('create table if not exists member_pixiv (member_id integer not null primary key, pixiv_id integer)')
+    await db.execute('create table if not exists plan_fee (fee numeric not null primary key, plan text)')
     return db
 
 async def reset_bindings_db(db):
@@ -228,9 +229,23 @@ async def delete_member_db(db, member_id):
     await db.execute('delete from member_pixiv where member_id = ?', (member_id,))
     await db.commit()
 
-async def get_plan_fee_lookup(fanbox_client):
-    plans = await fanbox_client.get_plans()
-    return {plan['fee']:plan['id'] for plan in plans}
+async def get_plan_fees_db(db):
+    cursor = await db.execute('select * from plan_fee')
+    result = await cursor.fetchall()
+    return {r[0]:r[1] for r in result}
+
+async def update_plan_fees_db(db, plan_fees):
+    for k,v in plan_fees.items():
+        await db.execute('replace into plan_fee values(?, ?)', (k, v))
+    await db.commit()
+
+async def get_plan_fee_lookup(fanbox_client, db):
+    cached_plans = await get_plan_fees_db(db)
+    latest_plans = await fanbox_client.get_plans()
+    latest_plans = {plan['fee']:plan['id'] for plan in latest_plans}
+    latest_plans = cached_plans | latest_plans
+    await update_plan_fees_db(db, latest_plans)
+    return latest_plans
 
 def has_role(member, roles):
     if member is None:
@@ -248,7 +263,7 @@ async def main(operator_mode):
     intents.members = True
     client = commands.bot.Bot(command_prefix='!', intents=intents)
     fanbox_client = FanboxClient(config.session_cookies, config.session_headers)
-    plan_fee_lookup = await get_plan_fee_lookup(fanbox_client)
+    plan_fee_lookup = None
     db = None
 
     async def fetch_member(discord_id):
@@ -483,6 +498,7 @@ async def main(operator_mode):
 
     try:
         db = await open_database()
+        await get_plan_fee_lookup(fanbox_client, db)
         token = config.operator_token if operator_mode else config.discord_token
         await client.start(token, reconnect=False)
     except Exception as ex:
