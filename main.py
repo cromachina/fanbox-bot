@@ -248,7 +248,6 @@ async def main(operator_mode):
     intents.members = True
     client = commands.bot.Bot(command_prefix='!', intents=intents)
     fanbox_client = FanboxClient(config.session_cookies, config.session_headers)
-    lock = asyncio.Lock()
     plan_fee_lookup = await get_plan_fee_lookup(fanbox_client)
     db = None
 
@@ -316,29 +315,33 @@ async def main(operator_mode):
         return compute_role(user_data)
 
     async def reset():
-        async with lock:
-            guild = client.guilds[0]
-            count = 0
-            async for member in guild.fetch_members(limit=None):
+        guild = client.guilds[0]
+        count = 0
+        async for member in guild.fetch_members(limit=None):
+            try:
                 await member.remove_roles(*config.all_roles)
-                count += 1
-            await reset_bindings_db(db)
-            return count
+            except:
+                pass
+            count += 1
+        await reset_bindings_db(db)
+        return count
 
     def is_old_member(joined_at):
         return joined_at + datetime.timedelta(hours=config.cleanup.member_age_hours) <= datetime.datetime.now(joined_at.tzinfo)
 
     async def purge():
-        async with lock:
-            guild = client.guilds[0]
-            names = []
-            async for member in guild.fetch_members(limit=None):
-                if len(member.roles) == 1 and is_old_member(member.joined_at):
+        guild = client.guilds[0]
+        names = []
+        async for member in guild.fetch_members(limit=None):
+            if len(member.roles) == 1 and is_old_member(member.joined_at):
+                try:
                     await member.kick(reason="Purge: No role assigned")
                     names.append(member.name)
-            if len(names) > 0:
-                logging.info(f'purged {len(names)} users without roles: {names}')
-            return names
+                except:
+                    pass
+        if len(names) > 0:
+            logging.info(f'purged {len(names)} users without roles: {names}')
+        return names
 
     async def cleanup():
         try:
@@ -381,8 +384,7 @@ async def main(operator_mode):
 
         await update_member_pixiv_id_db(db, member.id, pixiv_id)
 
-        async with lock:
-            await set_member_role(member, role)
+        await set_member_role(member, role)
 
         await respond(message, 'access_granted')
 
@@ -402,8 +404,7 @@ async def main(operator_mode):
 
         await update_member_pixiv_id_db(db, member.id, pixiv_id)
 
-        async with lock:
-            await set_member_role(member, role)
+        await set_member_role(member, role)
 
         await ctx.send(f'{member} access granted.')
 
