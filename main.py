@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import calendar
 import datetime
+import itertools
 import json
 import logging
 import multiprocessing as mp
@@ -116,47 +117,72 @@ def load_config(config_file):
     with open(config_file, 'r', encoding='utf-8') as f:
         config = obj(yaml.load(f, Loader=yaml.Loader))
         config.plan_roles = make_roles_objects(config.plan_roles)
-        config.fallback_role = discord.Object(int(config.fallback_role))
         config.all_roles = list(config.plan_roles.values())
         config.cleanup = obj(config.cleanup)
-        config.auto_derole = obj(config.auto_derole)
+        config.auto_role_update = obj(config.auto_role_update)
         config.session_cookies = str_values(config.session_cookies)
         return config
 
 def parse_date(date_string):
     return datetime.datetime.fromisoformat(date_string)
 
-def previous_month(date):
-    date = date - datetime.timedelta(days = 1)
-    return datetime.datetime(year=date.year, month=date.month)
-
 def days_in_month(date):
-    return calendar.monthrange(date.year, date.month)[1]
+    return datetime.timedelta(days=calendar.monthrange(date.year, date.month)[1])
 
-def compute_last_day(txns):
+def compress_transactions(txns):
+    new_txns = []
+    for _, group in itertools.groupby(txns, lambda x: x['targetMonth']):
+        group = list(group)
+        date = parse_date(group[0]['transactionDatetime'])
+        new_txns.append({
+            'fee': sum(map(lambda x: x['paidAmount'], group)),
+            'date': date,
+            'deltatime' : days_in_month(date),
+        })
+    return new_txns
+
+def compute_last_subscription_range(txns):
     stop_date = datetime.datetime.min.replace(tzinfo=datetime.timezone.min)
+    txn_range = []
     for txn in reversed(txns):
-        date = parse_date(txn['transactionDatetime'])
+        date = txn['date']
         if stop_date < date:
-            stop_date = date + datetime.timedelta(days=days_in_month(date))
+            txn_range.clear()
+            stop_date = date + days_in_month(date)
         else:
             diff = abs(date - stop_date)
-            stop_date = date + datetime.timedelta(days=days_in_month(date)) + diff
-    return stop_date
+            stop_date = date + days_in_month(date) + diff
+        txn_range.append(txn)
+    return txn_range, stop_date
 
-def is_user_active_supporting(user_data):
-    if user_data is None:
-        return False
-    return user_data['supportingPlan'] is not None
+def compute_plan_id(txns, plan_fee_lookup, current_date):
+    txns = compress_transactions(txns)
+    txn_range, stop_date = compute_last_subscription_range(txns)
+    if stop_date < current_date or len(txn_range) == 0:
+        return None
+    # When there is only one choice, skip most of the calculation.
+    fee_types = {txn['fee'] for txn in txn_range}
+    if len(fee_types) == 1:
+        return plan_fee_lookup.get(fee_types.pop())
 
-def is_user_transaction_subscribed(user_data):
-    if user_data is None:
-        return False
-    txns = user_data['supportTransactions']
-    if not txns:
-        return False
-    last_day = compute_last_day(txns)
-    return last_day >= datetime.datetime.now(last_day.tzinfo)
+    # When there are multiple choices, fill out the time table.
+    # This could probably be made more efficient by using intervals, but that would
+    # be more a lot more complicated to implement.
+    days = [None] * abs(txn_range[0]['date'] - stop_date).days
+
+    start_date = txn_range[0]['date']
+    stop_idx = abs(start_date - current_date).days
+
+    for fee in sorted(plan_fee_lookup.keys(), reverse=True):
+        for txn in txn_range:
+            if fee == txn['fee']:
+                day_idx = abs(start_date - txn['date']).days
+                for _ in range(txn['deltatime'].days):
+                    while days[day_idx] != None:
+                        day_idx += 1
+                    days[day_idx] = fee
+
+    return plan_fee_lookup.get(max(days[max(stop_idx - 2, 0): min(stop_idx + 1, len(days) - 1)]))
 
 async def open_database():
     db = await aiosqlite.connect(registry_db)
@@ -202,16 +228,13 @@ async def delete_member_db(db, member_id):
     await db.execute('delete from member_pixiv where member_id = ?', (member_id,))
     await db.commit()
 
-async def get_latest_fanbox_user_data(fanbox_client, db, pixiv_id, force_update=False):
-    if pixiv_id is None:
-        return None
-    user_data = await get_user_data_db(db, pixiv_id)
-    if force_update or not is_user_transaction_subscribed(user_data):
-        user_data = await fanbox_client.get_user(pixiv_id)
-    await update_user_data_db(db, pixiv_id, user_data)
-    return user_data
+async def get_plan_fee_lookup(fanbox_client):
+    plans = await fanbox_client.get_plans()
+    return {plan['fee']:plan['id'] for plan in plans}
 
 def has_role(member, roles):
+    if member is None:
+        return False
     for role in roles:
         if member.get_role(role.id) is not None:
             return True
@@ -226,6 +249,7 @@ async def main(operator_mode):
     client = commands.bot.Bot(command_prefix='!', intents=intents)
     fanbox_client = FanboxClient(config.session_cookies, config.session_headers)
     lock = asyncio.Lock()
+    plan_fee_lookup = await get_plan_fee_lookup(fanbox_client)
     db = None
 
     async def fetch_member(discord_id):
@@ -234,51 +258,62 @@ async def main(operator_mode):
         except:
             return None
 
-    async def get_fanbox_user_data(pixiv_id, force_update=False):
-        return await get_latest_fanbox_user_data(fanbox_client, db, pixiv_id, force_update)
+    def compute_role(user_data):
+        if user_data is None:
+            return None
+        plan_id = compute_plan_id(user_data['supportTransactions'], plan_fee_lookup, datetime.datetime.now(datetime.timezone.min))
+        return config.plan_roles.get(plan_id)
 
-    async def derole_member(member, pixiv_id):
+    async def get_fanbox_user_data(pixiv_id, member=None, force_update=False):
+        if pixiv_id is None:
+            return None
+        user_data = await get_user_data_db(db, pixiv_id)
+        if not force_update:
+            role = compute_role(user_data)
+        if force_update or role is None or not has_role(member, [role]):
+            user_data = await fanbox_client.get_user(pixiv_id)
+        await update_user_data_db(db, pixiv_id, user_data)
+        return user_data
+
+    async def set_member_role(member, role):
         if member is None:
-            return
+            return False
         try:
-            await member.remove_roles(*config.all_roles)
+            if role is None:
+                await member.remove_roles(*config.all_roles)
+                return True
+            elif not has_role(member, [role]):
+                await member.remove_roles(*config.all_roles)
+                await member.add_roles(role)
+                return True
         except:
             pass
-        logging.info(f'Derole: {member} {pixiv_id}')
+        return False
 
-    async def derole_check_fanbox_supporter(member:discord.Member):
-        if len(member.roles) == 1:
-            return
+    async def update_role_check(member:discord.Member):
         if not has_role(member, config.all_roles):
             return
         pixiv_id = await get_member_pixiv_id_db(db, member.id)
-        user_data = await get_fanbox_user_data(pixiv_id)
-        if is_user_active_supporting(user_data) or is_user_transaction_subscribed(user_data):
-            return
-        await derole_member(member, pixiv_id)
+        user_data = await get_fanbox_user_data(pixiv_id, member=member)
+        role = compute_role(user_data)
+        if await set_member_role(member, role):
+            logging.info(f'Set role: member: {member} pixiv_id: {pixiv_id} role: {role}')
 
-    async def derole_check_all_fanbox_supporters():
+    async def update_role_check_all_members():
         guild = client.guilds[0]
-        logging.info(f'Begin derole check: {guild.member_count} members')
+        logging.info(f'Begin update role check: {guild.member_count} members')
         count = 0
         async for member in guild.fetch_members(limit=None):
             try:
-                await derole_check_fanbox_supporter(member)
+                await update_role_check(member)
                 count += 1
             except Exception as ex:
                 logging.exception(ex)
-        logging.info(f'End derole check: {count} checked')
+        logging.info(f'End update role check: {count} checked')
 
     async def get_fanbox_role_with_pixiv_id(pixiv_id):
         user_data = await get_fanbox_user_data(pixiv_id, force_update=True)
-        if not user_data:
-            return None
-        elif is_user_active_supporting(user_data):
-            return config.plan_roles.get(user_data['supportingPlan']['id'])
-        elif config.allow_fallback and is_user_transaction_subscribed(user_data):
-            return config.fallback_role
-        else:
-            return None
+        return compute_role(user_data)
 
     async def reset():
         async with lock:
@@ -347,9 +382,7 @@ async def main(operator_mode):
         await update_member_pixiv_id_db(db, member.id, pixiv_id)
 
         async with lock:
-            if config.clear_roles:
-                await member.remove_roles(*config.all_roles)
-            await member.add_roles(role)
+            await set_member_role(member, role)
 
         await respond(message, 'access_granted')
 
@@ -370,9 +403,7 @@ async def main(operator_mode):
         await update_member_pixiv_id_db(db, member.id, pixiv_id)
 
         async with lock:
-            if config.clear_roles:
-                await member.remove_roles(*config.all_roles)
-            await member.add_roles(role)
+            await set_member_role(member, role)
 
         await ctx.send(f'{member} access granted.')
 
@@ -381,7 +412,7 @@ async def main(operator_mode):
         pixiv_id = await get_member_pixiv_id_db(db, discord_id)
         await delete_member_db(db, discord_id)
         member = await fetch_member(discord_id)
-        await derole_member(member, pixiv_id)
+        await set_member_role(member, None)
         if member is not None:
             member = member.name
         await ctx.send(f'unbound user {(discord_id, member)} with pixiv_id {pixiv_id}')
@@ -427,8 +458,8 @@ async def main(operator_mode):
         if config.cleanup.run:
             periodic(cleanup, config.cleanup.period_hours * 60 * 60)
 
-        if config.auto_derole.run:
-            periodic(derole_check_all_fanbox_supporters, config.auto_derole.period_hours * 60 * 60)
+        if config.auto_role_update.run:
+            periodic(update_role_check_all_members, config.auto_role_update.period_hours * 60 * 60)
 
     @client.event
     async def on_message(message):

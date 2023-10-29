@@ -29,14 +29,6 @@ plan_roles:
 # Disallow multiple users from using the same Pixiv ID.
 strict_access: False
 
-# Allow an unsubscribed user to get access if they have subscribed before.
-allow_fallback: False
-# This must be a number, same as above.
-fallback_role: <ROLE_ID>
-
-# Clear all of the user's plan roles before applying a new role
-clear_roles: False
-
 # Periodic cleanup routines. Only runs after user activity
 cleanup:
   # If we should even run cleanup routines at all
@@ -46,8 +38,8 @@ cleanup:
   # Purge no-roll members older than X hours
   member_age_hours: 24
 
-# Derole an unsubscribed user after an extended period of no transactions.
-auto_derole:
+# Automatically update a user's role when it seems like their role will change.
+auto_role_update:
   run: False
   period_hours: 24
 
