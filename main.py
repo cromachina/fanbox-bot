@@ -496,9 +496,20 @@ async def main(operator_mode):
             logging.exception(ex)
             await respond(message, 'system_error')
 
+    def check_plans():
+        configured_plans = set(config.plan_roles.keys())
+        fanbox_plans = set(plan_fee_lookup.values())
+        config_missing = configured_plans - fanbox_plans
+        fanbox_missing = fanbox_plans - configured_plans
+        if config_missing:
+            logging.warning(f'The config file contains plans that were not found on Fanbox (including deleted plans): {config_missing}')
+        if fanbox_missing:
+            logging.warning(f'Fanbox may contain plans (including deleted plans) that were not found in the config file: {fanbox_missing}')
+
     try:
         db = await open_database()
         plan_fee_lookup = await get_plan_fee_lookup(fanbox_client, db)
+        check_plans()
         token = config.operator_token if operator_mode else config.discord_token
         await client.start(token, reconnect=False)
     except Exception as ex:
