@@ -498,7 +498,7 @@ async def main(operator_mode):
 
     try:
         db = await open_database()
-        await get_plan_fee_lookup(fanbox_client, db)
+        plan_fee_lookup = await get_plan_fee_lookup(fanbox_client, db)
         token = config.operator_token if operator_mode else config.discord_token
         await client.start(token, reconnect=False)
     except Exception as ex:
