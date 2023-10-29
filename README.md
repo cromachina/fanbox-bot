@@ -22,6 +22,8 @@ The bot will make the best effort to assign the correct role based on the user's
 #### Determining role assignment
 The highest role assigned is determined like so: A calendar month's transactions for a user are summed up and replaced by the last transaction in that month, so if they had two 500 yen transactions on 6/10 and 6/15, then this would be represented by one 1000 yen transaction on 6/15. Then, for contiguous months of transactions, the days in that period of time are filled starting with the highest roles first, for a month worth of time, in the positions each transaction starts, or the next available position that can be filled. This is easier to demonstrate with the following graphs:
 
+![image](https://github.com/cromachina/fanbox-bot/assets/82557197/8e1e4414-5bdb-42cc-a1f9-f4d6e693e509)
+
 #### Why transactions?
 Transactions are used to determine roles because this is the only historical information that the Fanbox API provides. Unfortunately Fanbox does not provide what specific plan was purchased with a given transaction, which makes determining which role to assign more complicated. This also means that plans should be uniquely determined by their price.
 
