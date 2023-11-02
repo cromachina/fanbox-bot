@@ -182,7 +182,14 @@ def compute_plan_id(txns, plan_fee_lookup, current_date):
                         day_idx += 1
                     days[day_idx] = fee
 
-    return plan_fee_lookup.get(max(days[max(stop_idx - 2, 0): min(stop_idx + 1, len(days) - 1)]))
+    # Remaining empty spaces will be caused by old plans that were never entered
+    # into the plan fee lookup, usually because an old plan was removed.
+    # Filling the empty spaces with the lowest plan will be the best effort resolution.
+    days = days[max(stop_idx - 2, 0): min(stop_idx + 1, len(days) - 1)]
+    min_fee = min(plan_fee_lookup)
+    days = [min_fee if day is None else day for day in days]
+
+    return plan_fee_lookup.get(max(days))
 
 async def open_database():
     db = await aiosqlite.connect(registry_db)
