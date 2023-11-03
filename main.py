@@ -110,8 +110,8 @@ def setup_logging(log_file):
             logging.FileHandler(log_file, encoding='utf-8'),
             logging.StreamHandler()
         ])
-    discord_logger = logging.getLogger('discord')
-    discord_logger.setLevel(logging.WARNING)
+    logging.getLogger('discord').setLevel(logging.WARNING)
+    logging.getLogger('httpx').setLevel(logging.WARNING)
 
 def load_config(config_file):
     with open(config_file, 'r', encoding='utf-8') as f:
