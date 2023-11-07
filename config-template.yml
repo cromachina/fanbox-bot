@@ -42,6 +42,9 @@ cleanup:
 auto_role_update:
   run: False
   period_hours: 24
+  # Number of days to extend the stop date for a derole. Can help for the possible
+  # lapse in Fanbox transactions at the beginning of the month.
+  leeway_days: 5
 
 # Messages to return to the user for each condition
 system_messages:

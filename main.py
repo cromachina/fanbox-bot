@@ -155,9 +155,10 @@ def compute_last_subscription_range(txns):
         txn_range.append(txn)
     return txn_range, stop_date
 
-def compute_plan_id(txns, plan_fee_lookup, current_date):
+def compute_plan_id(txns, plan_fee_lookup, current_date, leeway_days):
     txns = compress_transactions(txns)
     txn_range, stop_date = compute_last_subscription_range(txns)
+    stop_date = stop_date + datetime.timedelta(days=abs(leeway_days))
     if stop_date < current_date or len(txn_range) == 0:
         return None
     # When there is only one choice, skip most of the calculation.
@@ -186,7 +187,7 @@ def compute_plan_id(txns, plan_fee_lookup, current_date):
     # into the plan fee lookup, usually because an old plan was removed.
     # Filling the empty spaces with the lowest plan will be the best effort resolution.
     days = days[max(stop_idx - 2, 0): min(stop_idx + 1, len(days) - 1)]
-    min_fee = min(plan_fee_lookup)
+    min_fee = min(fee_types)
     days = [min_fee if day is None else day for day in days]
 
     return plan_fee_lookup.get(max(days))
@@ -282,7 +283,7 @@ async def main(operator_mode):
     def compute_role(user_data):
         if user_data is None:
             return None
-        plan_id = compute_plan_id(user_data['supportTransactions'], plan_fee_lookup, datetime.datetime.now(datetime.timezone.min))
+        plan_id = compute_plan_id(user_data['supportTransactions'], plan_fee_lookup, datetime.datetime.now(datetime.timezone.min), config.auto_role_update.leeway_days)
         return config.plan_roles.get(plan_id)
 
     async def get_fanbox_user_data(pixiv_id, member=None, force_update=False):
