@@ -1,0 +1,10 @@
+version: "3.8"
+services:
+  fanbox-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: fanbox-bot
+    restart: always
+    volumes:
+      - ./:/app

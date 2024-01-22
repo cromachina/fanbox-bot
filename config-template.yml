@@ -4,6 +4,7 @@ discord_token: <DISCORD_BOT_TOKEN>
 
 # This is for testing out commands with another bot, optional.
 operator_token: <DISCORD_OPERATOR_BOT_TOKEN>
+operator_mode: False
 
 # ID of the user to use admin commands.
 # This must be a number, like 12345.

@@ -263,7 +263,7 @@ def has_role(member, roles):
             return True
     return False
 
-async def main(operator_mode):
+async def main():
     config = load_config(config_file)
     setup_logging(config.log_file)
     rate_limit_table = {}
@@ -493,7 +493,7 @@ async def main(operator_mode):
             return
 
         try:
-            if operator_mode and message.author.id != config.admin_id:
+            if config.operator_mode and message.author.id != config.admin_id:
                 return
             if message.author.id == config.admin_id and message.content.startswith('!'):
                 await client.process_commands(message)
@@ -518,7 +518,7 @@ async def main(operator_mode):
         db = await open_database()
         plan_fee_lookup = await get_plan_fee_lookup(fanbox_client, db)
         check_plans()
-        token = config.operator_token if operator_mode else config.discord_token
+        token = config.operator_token if config.operator_mode else config.discord_token
         await client.start(token, reconnect=False)
     except Exception as ex:
         logging.exception(ex)
@@ -529,13 +529,39 @@ async def main(operator_mode):
     logging.warning(f'Disconnected: reconnecting in {delay}s')
     await asyncio.sleep(delay)
 
-def run_main(operator):
-    asyncio.run(main(operator))
+def run_main():
+    asyncio.run(main())
+
+async def db_migration():
+    import pickle
+    import os
+    if not os.path.exists('registry.dat'):
+        return
+    print('Found registry.dat: Starting DB migration')
+    with open('registry.dat', 'rb') as f:
+        reg = pickle.load(f)
+    config = load_config(main.config_file)
+    client = FanboxClient(config.session_cookies, config.session_headers)
+    db = await open_database()
+    for discord_id, pixiv_ids in reg['discord_ids'].items():
+        for pixiv_id in pixiv_ids:
+            try:
+                user_data = await client.get_user(pixiv_id)
+            except:
+                continue
+            if user_data is None:
+                continue
+            print(f'user {discord_id} {pixiv_id}')
+            await update_member_pixiv_id_db(db, discord_id, pixiv_id)
+            await update_user_data_db(db, pixiv_id, user_data)
+            break
+    await db.close()
+    os.rename('registry.dat', 'registry.dat.backup')
+    print('Moved registry.dat to registry.dat.backup')
+    print('DB migration finished')
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--operator', action='store_true')
-    args = parser.parse_args()
+    asyncio.run(db_migration())
 
     while True:
         # Because discord.py is not closing aiohttp clients correctly,
@@ -543,6 +569,6 @@ if __name__ == '__main__':
         # If disconnects are frequent, the periodic cleanup function may never run.
         # A new discord client could be created, but then aiohttp sockets may leak,
         # and eventually resources would be exhausted.
-        p = mp.Process(target=run_main, daemon=True, args=(args.operator,))
+        p = mp.Process(target=run_main, daemon=True)
         p.start()
         p.join()

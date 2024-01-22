@@ -30,9 +30,6 @@ Transactions are used to determine roles because this is the only historical inf
 #### Adding or removing plans from Fanbox
 Each time the bot starts, plans are retrieved from Fanbox and cached. If you removed a plan from your Fanbox, you should still keep the plan in your `plan_roles` setting so that a user can still be granted the last valid role that plan represented. When no more users have that role, you could then remove that plan from the `plan_roles` setting without impacting user experience.
 
-### Database Migration
-If you are using an older version of the bot without `auto_role_update`, and want to update to a newer version with the feature, then all of your users will be deroled immediately when you run the bot, unless you migrate the database first. Typically this is not an issue, as users can simply send their Pixiv ID to the bot to get the role again. If you want to perform a migration without lots of deroles occurring, run `dbmig.py` first (it can take a while to run), then start the bot with `auto_role_update` enabled.
-
 ## Admin commands
 Admin commands are prefixed with `!`, for example `!reset`
 - `add-user PIXIV_ID DISCORD_ID` attempt to grant access for another user. `DISCORD_ID` is the numerical ID of a user, not their user name. This command ignores `strict_access`.
@@ -51,23 +48,22 @@ Admin commands are prefixed with `!`, for example `!reset`
         - This intent is needed for the reset and purge functionality to work, even if they are not used.
     - It is easiest to invite your bot instance to your server with administrator permissions to prevent permission errors. You can try using more restrictive permissions, but good luck.
     - Only invite one instance of a running bot to one server. If you invite the bot instance to multiple servers, it will only work with the first server it can find, which might be randomly ordered. If you need a bot to run in multiple servers, then run different instances of the bot out of different directories (so that you can have a unique config for each server, and the registry files wont clash).
-- Install python with pip: https://www.python.org/downloads/
-- Download and extract this repository to a new directory.
-- Open a command window in the directory where you downloaded this repository.
-  - If you are using Windows, navigate to the target directory in File Explorer, then type `cmd` in the address bar and hit enter to open a command window there.
-- Run `pip install -r requirements.txt` to install dependencies.
+- The bot must be running continually to service random requests and run periodic functions. If you do not have a continually running computer, then I recommend renting a lightweight VM on a cloud service (Google Cloud, AWS, DigitalOcean, etc.) to host your bot instance.
+- I recommend installing Docker to run the bot, to both mitigate build issues and have your bot start automatically if your computer or VM restarts.
+  - For Windows: https://www.docker.com/products/docker-desktop/
+  - If using a cloud VM, typically Debian or Ubuntu Linux: run `sudo apt update && sudo apt install docker`
+- Download (or clone) and extract this repository to a new directory.
 - Copy `config-template.yml` to `config.yml`
 - In `config.yml`, update all of the places with angle brackets: `<...>`
   - For example: `<ROLE_ID>` becomes `12345`, but not `<12345>` (remove the brackets).
   - If you are not using a particular feature, you can fill it in with a dummy value, like `0`.
 - You can change any other default fields in `config.yml` as well to turn on other functionality.
-- Run `python3 main.py`
-- The bot must be running continually to service random requests and run periodic functions. If you do not have a continually running computer, then I recommend renting a lightweight VM on a cloud service (Google Cloud, AWS, etc.) to host your bot instance.
+- To start the bot, run `docker compose up -d` in the bot directory.
+- To stop, run `docker compose down` in the bot directory.
+- Logs are written to `log.txt`, or you can view output with Docker `docker compose logs --follow`
 
-## Updating from a previous version
-- Stop the bot.
-- Get the latest version of the repository.
-- Run `pip install -r requirements.txt` again to install any new or changed dependencies.
-- Redo the steps for copying the config template, because the config may have changed.
-- Run the `dbmig.py` script to completion if appropriate (see `Database Migration` above for details).
-- Start the bot.
+## Updating the bot
+- Stop the bot `docker compose down`
+- Download the latest version
+- Run `docker compose build` to update dependencies
+- Start the bot `docker compose up -d`
