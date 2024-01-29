@@ -1,4 +1,3 @@
-import argparse
 import asyncio
 import calendar
 import datetime
@@ -116,6 +115,7 @@ def setup_logging(log_file):
 def load_config(config_file):
     with open(config_file, 'r', encoding='utf-8') as f:
         config = obj(yaml.load(f, Loader=yaml.Loader))
+        config.admin_role_id = discord.Object(int(config.admin_role_id))
         config.plan_roles = make_roles_objects(config.plan_roles)
         config.all_roles = list(config.plan_roles.values())
         config.cleanup = obj(config.cleanup)
@@ -493,9 +493,10 @@ async def main():
             return
 
         try:
-            if config.operator_mode and message.author.id != config.admin_id:
+            is_admin = has_role(await fetch_member(message.author.id), [config.admin_role_id])
+            if config.operator_mode and not is_admin:
                 return
-            if message.author.id == config.admin_id and message.content.startswith('!'):
+            if is_admin and message.content.startswith('!'):
                 await client.process_commands(message)
             else:
                 await handle_access(message)

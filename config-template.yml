@@ -6,10 +6,10 @@ discord_token: <DISCORD_BOT_TOKEN>
 operator_token: <DISCORD_OPERATOR_BOT_TOKEN>
 operator_mode: False
 
-# ID of the user to use admin commands.
+# ID of the role to use admin commands.
 # This must be a number, like 12345.
-# To get your Discord ID, turn on developer mode in Discord, right click on your name, and select "Copy ID".
-admin_id: <DISCORD_ADMIN_ID>
+# To get your Discord Role ID, turn on developer mode in Discord, right click on your role, and select "Copy ID".
+admin_role_id: <DISCORD_ADMIN_ROLE_ID>
 
 # File to log system information to
 log_file: log.txt
