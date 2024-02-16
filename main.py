@@ -475,7 +475,10 @@ async def main():
 
     @client.event
     async def on_ready():
+        if client.guilds.count > 1:
+            logging.warning('This bot has been invited to more than 1 server. The bot may not work correctly.')
         logging.info(f'{client.user} has connected to Discord!')
+        
         if config.cleanup.run:
             periodic(cleanup, config.cleanup.period_hours * 60 * 60)
 
