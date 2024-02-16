@@ -300,16 +300,13 @@ async def main():
     async def set_member_role(member, role):
         if member is None:
             return False
-        try:
-            if role is None:
-                await member.remove_roles(*config.all_roles)
-                return True
-            elif not has_role(member, [role]):
-                await member.remove_roles(*config.all_roles)
-                await member.add_roles(role)
-                return True
-        except:
-            pass
+        if role is None:
+            await member.remove_roles(*config.all_roles)
+            return True
+        elif not has_role(member, [role]):
+            await member.remove_roles(*config.all_roles)
+            await member.add_roles(role)
+            return True
         return False
 
     async def update_role_check(member:discord.Member):
