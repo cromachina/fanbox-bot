@@ -475,7 +475,7 @@ async def main():
 
     @client.event
     async def on_ready():
-        if client.guilds.count > 1:
+        if len(client.guilds) > 1:
             logging.warning('This bot has been invited to more than 1 server. The bot may not work correctly.')
         logging.info(f'{client.user} has connected to Discord!')
         
