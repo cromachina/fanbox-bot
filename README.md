@@ -44,10 +44,12 @@ Admin commands are prefixed with `!`, for example `!reset`
 ## Install and configuration
 - Create a Discord app and bot:
     - https://discordpy.readthedocs.io/en/stable/discord.html
-    - Additional step: Go to your bot application settings, under the `Bot` tab, scroll down to `server members intent` and turn it on.
-        - This intent is needed for the reset and purge functionality to work, even if they are not used.
-    - It is easiest to invite your bot instance to your server with administrator permissions to prevent permission errors. You can try using more restrictive permissions, but good luck.
-    - Only invite one instance of a running bot to one server. If you invite the bot instance to multiple servers, it will only work with the first server it can find, which might be randomly ordered. If you need a bot to run in multiple servers, then run different instances of the bot out of different directories (so that you can have a unique config for each server, and the registry files wont clash).
+    - Additional steps: Go to your bot application settings, under the `Bot` tab, scroll down and enable the following settings:
+        - `Server Members Intent`
+        - `Message Content Intent`
+    - ⚠ It is easiest to invite your bot instance to your server with administrator permissions to prevent permission errors. You can try using more restrictive permissions, but you will probably run into issues.
+    - ⚠ Only invite one instance of a running bot to one server. If you invite the bot instance to multiple servers, it will only work with the first server it can find, which might be randomly ordered.
+        - If you need a bot to run in multiple servers, then run different instances of the bot out of different directories, with different bot tokens (you have to create a new Discord app).
 - The bot must be running continually to service random requests and run periodic functions. If you do not have a continually running computer, then I recommend renting a lightweight VM on a cloud service (Google Cloud, AWS, DigitalOcean, etc.) to host your bot instance.
 - I recommend installing Docker to run the bot, to both mitigate build issues and have your bot start automatically if your computer or VM restarts.
   - For Windows: https://www.docker.com/products/docker-desktop/
