@@ -48,6 +48,7 @@ Admin commands are prefixed with `!`, for example `!reset`
         - `Server Members Intent`
         - `Message Content Intent`
     - ⚠ It is easiest to invite your bot instance to your server with administrator permissions to prevent permission errors. You can try using more restrictive permissions, but you will probably run into issues.
+        - The bot's role must be higher in the role settings than the roles of the users it is assigning new roles to, otherwise you may get a permission error when assigning roles.
     - ⚠ Only invite one instance of a running bot to one server. If you invite the bot instance to multiple servers, it will only work with the first server it can find, which might be randomly ordered.
         - If you need a bot to run in multiple servers, then run different instances of the bot out of different directories, with different bot tokens (you have to create a new Discord app).
 - The bot must be running continually to service random requests and run periodic functions. If you do not have a continually running computer, then I recommend renting a lightweight VM on a cloud service (Google Cloud, AWS, DigitalOcean, etc.) to host your bot instance.
