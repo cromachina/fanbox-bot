@@ -18,7 +18,7 @@ from discord.ext import commands
 config_file = 'config.yml'
 registry_db = 'registry.db'
 fanbox_id_prog = re.compile('(\\d+)')
-periodic_tasks = []
+periodic_tasks = {}
 
 class obj:
     def __init__(self, d):
@@ -36,9 +36,10 @@ def periodic(func, timeout):
             except Exception as ex:
                 logging.exception(ex)
             await asyncio.sleep(timeout)
-    task = asyncio.create_task(run())
-    periodic_tasks.append(task)
-    return task
+    if periodic_tasks.get(func) is None:
+        task = asyncio.create_task(run())
+        periodic_tasks[func] = task
+        return task
 
 class RateLimiter():
     def __init__(self, rate_limit_seconds):
