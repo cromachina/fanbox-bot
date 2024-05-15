@@ -4,9 +4,13 @@ This bot is used to automate access control for my Fanbox Discord server.
 The bot accesses the Fanbox API using your Fanbox session token. This is found in your browser cookies when accessing Fanbox.
 
 ## Access control
-When a Discord user sends the bot their Pixiv ID number, it is checked against their Fanbox transaction records, which will grant appropriate access. You can simply tell the users to message their Pixiv profile link to the bot, for example `https://www.pixiv.net/users/11`, which will extract `11` and check that ID.
+The Discord user sends the bot their Pixiv ID number, which will grant appropriate access. You can simply tell the users to message their Pixiv profile link to the bot, for example `https://www.pixiv.net/users/11`, which will extract `11` and check that ID.
 
-When `strict_access` is set to `True`, the bot will disallow users from using the same Pixiv ID. When a user successfully authenticates, their Discord ID is "bound" to their Pixiv ID. Successfully authenticating again will update their Pixiv ID binding. The user can only be unbound by an admin command. Some users may have had to create new Discord accounts, therefore the you will have to manually resolve unbinding of their old account.
+When `only_check_current_sub` is `False`, the user's Pixiv ID is checked against their Fanbox transaction records. More details below in Auto Role Update.
+
+When `only_check_current_sub` is `True`, then the user's current subscription status is checked instead of their transaction records.
+
+When `strict_access` is `True`, the bot will disallow different Discord users from using the same Pixiv ID. When a user successfully authenticates, their Discord ID is "bound" to their Pixiv ID. Successfully authenticating again will update their Pixiv ID binding. The user can only be unbound by an admin command. Some users may have had to create new Discord accounts, therefore the you will have to manually resolve unbinding of their old account. See Admin commands below.
 
 ## Other functionality
 
@@ -14,12 +18,18 @@ When `strict_access` is set to `True`, the bot will disallow users from using th
 The bot can be configured to periodically purge old users without roles. See `cleanup` in the config.
 
 ### Auto Role Update
-The bot can be configured to periodically update a user's role based on their Fanbox subscription. See `auto_role_update` in the config. The subscription is checked whenever the bot thinks the subscription is going to change. Because this is based on the last cached data of the user, if the user wants their role to be updated immediately (such as to a higher role), then they need to submit their Pixiv ID to the bot again.
+The bot can be configured to periodically update a user's role based on their Fanbox subscription. See `auto_role_update` in the config.
 
-#### Period of role assignment
+When `only_check_current_sub` is `False`, the subscription is checked whenever the bot thinks the subscription is going to change based on a user's previous transactions. The behavior of this is for "fair access", meaning that if a user pays for a month of time, then they get a month of access from that payment date, roughly.
+
+When `only_check_current_sub` is `True`, a previously registered user will have their roll updated based on their current subscription status at the time of the check. Transactions are not considered in this case. The behavior of this is like "unfair access", meaning that a user that subscribes only at the end of a month may not retain access into the next month. This behavior is similar to how Fanbox works.
+
+If the user wants their role to be updated immediately (such as to a higher role), then they can submit their Pixiv ID to the bot again to force a check.
+
+#### Period of role assignment by transactions
 The bot will make the best effort to assign the correct role based on the user's previous recent transactions, as well as ensure that they get to retain the role for the contiguous overflow days since making those transactions. For example: If a user had subscribed on 6/15, 7/1, and 8/1, then the last day of their subscription is approximately 9/15.
 
-#### Determining role assignment
+#### Determining role assignment by transactions
 The highest role assigned is determined like so: A calendar month's transactions for a user are summed up and replaced by the last transaction in that month, so if they had two 500 yen transactions on 6/10 and 6/15, then this would be represented by one 1000 yen transaction on 6/15. Then, for contiguous months of transactions, the days in that period of time are filled starting with the highest roles first, for a month worth of time, in the positions each transaction starts, or the next available position that can be filled. This is easier to demonstrate with the following graphs:
 
 ![image](https://github.com/cromachina/fanbox-bot/assets/82557197/8e1e4414-5bdb-42cc-a1f9-f4d6e693e509)
@@ -29,6 +39,8 @@ Transactions are used to determine roles because this is the only historical inf
 
 #### Adding or removing plans from Fanbox
 Each time the bot starts, plans are retrieved from Fanbox and cached. If you removed a plan from your Fanbox, you should still keep the plan in your `plan_roles` setting so that a user can still be granted the last valid role that plan represented. When no more users have that role, you could then remove that plan from the `plan_roles` setting without impacting user experience.
+
+When `only_check_current_sub` is `True`, a user who was subscribed to a removed plan might lose access. This is hard to test for.
 
 ## Admin commands
 Admin commands are prefixed with `!`, for example `!reset`

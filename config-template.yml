@@ -30,6 +30,10 @@ plan_roles:
 # Disallow multiple users from using the same Pixiv ID.
 strict_access: False
 
+# Check if the user is simply subscribed to a plan or not at this moment instead of using transaction records.
+# This is "less fair" access than the transactions method, and the user must be subscribed when submitting for access.
+only_check_current_sub: False
+
 # Periodic cleanup routines. Only runs after user activity
 cleanup:
   # If we should even run cleanup routines at all

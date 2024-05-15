@@ -74,6 +74,9 @@ class FanboxClient:
 
     async def get_plans(self):
         return await self.get_payload(self.client.get('plan.listCreator', params={'userId': self.self_id}))
+    
+    async def get_all_users(self):
+        return await self.get_payload(self.client.get('relationship.listFans', params={'status': 'supporter'}))
 
 def map_dict(a, f):
     b = {}
@@ -297,20 +300,26 @@ async def main():
             user_data = await fanbox_client.get_user(pixiv_id)
         await update_user_data_db(db, pixiv_id, user_data)
         return user_data
+    
+    async def get_all_fanbox_users():
+        all_users = await fanbox_client.get_all_users()
+        return {int(user['user']['userId']): user['planId'] for user in all_users}
 
     async def set_member_role(member, role):
         if member is None:
             return False
         if role is None:
-            await member.remove_roles(*config.all_roles)
-            return True
+            if has_role(member, config.all_roles):
+                await member.remove_roles(*config.all_roles)
+                return True
+            return False
         elif not has_role(member, [role]):
             await member.remove_roles(*config.all_roles)
             await member.add_roles(role)
             return True
         return False
 
-    async def update_role_check(member:discord.Member):
+    async def update_role_check_by_txn(member:discord.Member):
         if not has_role(member, config.all_roles):
             return
         pixiv_id = await get_member_pixiv_id_db(db, member.id)
@@ -319,21 +328,57 @@ async def main():
         if await set_member_role(member, role):
             logging.info(f'Set role: member: {member} pixiv_id: {pixiv_id} role: {role}')
 
-    async def update_role_check_all_members():
+    async def update_role_check_all_members_by_txn():
         guild = client.guilds[0]
         logging.info(f'Begin update role check: {guild.member_count} members')
         count = 0
         async for member in guild.fetch_members(limit=None):
             try:
-                await update_role_check(member)
+                await update_role_check_by_txn(member)
                 count += 1
             except Exception as ex:
                 logging.exception(ex)
         logging.info(f'End update role check: {count} checked')
 
+    async def update_role_check_by_list(member:discord.Member, supporters):
+        pixiv_id = await get_member_pixiv_id_db(db, member.id)
+        if pixiv_id is None:
+            return
+        supporter = supporters.get(pixiv_id)
+        if supporter is None:
+            pass
+        role = config.plan_roles.get(supporter)
+        if await set_member_role(member, role):
+            logging.info(f'Set role: member: {member} pixiv_id: {pixiv_id} role: {role}')
+
+    async def update_role_check_all_members_by_list():
+        guild = client.guilds[0]
+        logging.info(f'Begin update role check: {guild.member_count} members')
+        count = 0
+        all_fanbox_users = await get_all_fanbox_users()
+        async for member in guild.fetch_members(limit=None):
+            try:
+                await update_role_check_by_list(member, all_fanbox_users)
+                count += 1
+            except Exception as ex:
+                logging.exception(ex)
+        logging.info(f'End update role check: {count} checked')
+
+    async def update_role_check_all_members():
+        if config.only_check_current_sub:
+            await update_role_check_all_members_by_list()
+        else:
+            await update_role_check_all_members_by_txn()
+
     async def get_fanbox_role_with_pixiv_id(pixiv_id):
         user_data = await get_fanbox_user_data(pixiv_id, force_update=True)
-        return compute_role(user_data)
+        if config.only_check_current_sub:
+            plan = user_data['supportingPlan']
+            if plan is None:
+                return None
+            return config.plan_roles.get(plan['id'])
+        else:
+            return compute_role(user_data)
 
     async def reset():
         guild = client.guilds[0]
