@@ -344,10 +344,8 @@ async def main():
         pixiv_id = await get_member_pixiv_id_db(db, member.id)
         if pixiv_id is None:
             return
-        supporter = supporters.get(pixiv_id)
-        if supporter is None:
-            pass
-        role = config.plan_roles.get(supporter)
+        plan_id = supporters.get(pixiv_id)
+        role = config.plan_roles.get(plan_id)
         if await set_member_role(member, role):
             logging.info(f'Set role: member: {member} pixiv_id: {pixiv_id} role: {role}')
 
