@@ -585,7 +585,7 @@ async def db_migration():
     print('Found registry.dat: Starting DB migration')
     with open('registry.dat', 'rb') as f:
         reg = pickle.load(f)
-    config = load_config(main.config_file)
+    config = load_config(config_file)
     client = FanboxClient(config.session_cookies, config.session_headers)
     db = await open_database()
     for discord_id, pixiv_ids in reg['discord_ids'].items():
