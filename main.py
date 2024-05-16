@@ -17,7 +17,7 @@ from discord.ext import commands
 
 config_file = 'config.yml'
 registry_db = 'registry.db'
-fanbox_id_prog = re.compile('(\\d+)')
+fanbox_id_prog = re.compile(r'(\d+)')
 periodic_tasks = {}
 
 class obj:
@@ -41,7 +41,7 @@ def periodic(func, timeout):
         periodic_tasks[func] = task
         return task
 
-class RateLimiter():
+class RateLimiter:
     def __init__(self, rate_limit_seconds):
         self.limit_lock = asyncio.Lock()
         self.rate_limit = rate_limit_seconds
@@ -55,7 +55,7 @@ class RateLimiter():
             return result
 
 class FanboxClient:
-    def __init__(self, cookies, headers) -> None:
+    def __init__(self, cookies, headers):
         self.rate_limiter = RateLimiter(5)
         self.self_id = cookies['FANBOXSESSID'].split('_')[0]
         self.client = httpx.AsyncClient(base_url='https://api.fanbox.cc/', cookies=cookies, headers=headers)
@@ -74,9 +74,6 @@ class FanboxClient:
 
     async def get_plans(self):
         return await self.get_payload(self.client.get('plan.listCreator', params={'userId': self.self_id}))
-    
-    async def get_all_users(self):
-        return await self.get_payload(self.client.get('relationship.listFans', params={'status': 'supporter'}))
 
 def map_dict(a, f):
     b = {}
@@ -146,7 +143,7 @@ def compress_transactions(txns):
     return new_txns
 
 def compute_last_subscription_range(txns):
-    stop_date = datetime.datetime.min.replace(tzinfo=datetime.timezone.min)
+    stop_date = datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
     txn_range = []
     for txn in reversed(txns):
         date = txn['date']
@@ -163,37 +160,54 @@ def compute_plan_id(txns, plan_fee_lookup, current_date, leeway_days):
     txns = compress_transactions(txns)
     txn_range, stop_date = compute_last_subscription_range(txns)
     stop_date = stop_date + datetime.timedelta(days=abs(leeway_days))
-    if stop_date < current_date or len(txn_range) == 0:
+
+    # Ensure current_date is in UTC
+    if current_date.tzinfo is None:
+        current_date = current_date.replace(tzinfo=datetime.timezone.utc)
+    
+    current_month_start = current_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    leeway_date = current_month_start + datetime.timedelta(days=leeway_days)
+
+    if current_date <= leeway_date:
+        # Check for transactions in the last month or current month
+        last_month_start = (current_month_start - datetime.timedelta(days=1)).replace(day=1)
+        valid_txns = [txn for txn in txn_range if last_month_start <= txn['date'] < current_month_start or current_month_start <= txn['date'] <= current_date]
+        logging.info(f"Checking transactions in last month or current month: {valid_txns}")
+    else:
+        # Check for transactions only in the current month
+        valid_txns = [txn for txn in txn_range if current_month_start <= txn['date'] <= current_date]
+        logging.info(f"Checking transactions only in current month: {valid_txns}")
+
+    if not valid_txns:
+        logging.info("No valid transactions found.")
         return None
+
     # When there is only one choice, skip most of the calculation.
-    fee_types = {txn['fee'] for txn in txn_range}
+    fee_types = {txn['fee'] for txn in valid_txns}
     if len(fee_types) == 1:
+        logging.info(f"Single fee type found: {fee_types}")
         return plan_fee_lookup.get(fee_types.pop())
 
     # When there are multiple choices, fill out the time table.
-    # This could probably be made more efficient by using intervals, but that would
-    # be more a lot more complicated to implement.
-    days = [None] * abs(txn_range[0]['date'] - stop_date).days
+    days = [None] * abs((valid_txns[0]['date'] - stop_date).days)
 
-    start_date = txn_range[0]['date']
-    stop_idx = abs(start_date - current_date).days
+    start_date = valid_txns[0]['date']
+    stop_idx = abs((start_date - current_date).days)
 
     for fee in sorted(plan_fee_lookup.keys(), reverse=True):
-        for txn in txn_range:
+        for txn in valid_txns:
             if fee == txn['fee']:
-                day_idx = abs(start_date - txn['date']).days
+                day_idx = abs((start_date - txn['date']).days)
                 for _ in range(txn['deltatime'].days):
-                    while days[day_idx] != None:
+                    while days[day_idx] is not None:
                         day_idx += 1
                     days[day_idx] = fee
 
-    # Remaining empty spaces will be caused by old plans that were never entered
-    # into the plan fee lookup, usually because an old plan was removed.
-    # Filling the empty spaces with the lowest plan will be the best effort resolution.
     days = days[max(stop_idx - 2, 0): min(stop_idx + 1, len(days) - 1)]
     min_fee = min(fee_types)
     days = [min_fee if day is None else day for day in days]
 
+    logging.info(f"Days array: {days}")
     return plan_fee_lookup.get(max(days))
 
 async def open_database():
@@ -204,9 +218,9 @@ async def open_database():
     return db
 
 async def reset_bindings_db(db):
-    db.execute('delete from member_pixiv')
-    db.execute('vacuum')
-    db.commit()
+    await db.execute('delete from member_pixiv')
+    await db.execute('vacuum')
+    await db.commit()
 
 async def get_user_data_db(db, pixiv_id):
     cursor = await db.execute('select data from user_data where pixiv_id = ?', (pixiv_id,))
@@ -247,14 +261,14 @@ async def get_plan_fees_db(db):
     return {r[0]:r[1] for r in result}
 
 async def update_plan_fees_db(db, plan_fees):
-    for k,v in plan_fees.items():
+    for k, v in plan_fees.items():
         await db.execute('replace into plan_fee values(?, ?)', (k, v))
     await db.commit()
 
 async def get_plan_fee_lookup(fanbox_client, db):
     cached_plans = await get_plan_fees_db(db)
     latest_plans = await fanbox_client.get_plans()
-    latest_plans = {plan['fee']:plan['id'] for plan in latest_plans}
+    latest_plans = {plan['fee']: plan['id'] for plan in latest_plans}
     latest_plans = cached_plans | latest_plans
     await update_plan_fees_db(db, latest_plans)
     return latest_plans
@@ -273,7 +287,7 @@ async def main():
     rate_limit_table = {}
     intents = discord.Intents.default()
     intents.members = True
-    client = commands.bot.Bot(command_prefix='!', intents=intents)
+    client = commands.Bot(command_prefix='!', intents=intents)
     fanbox_client = FanboxClient(config.session_cookies, config.session_headers)
     plan_fee_lookup = None
     db = None
@@ -287,7 +301,10 @@ async def main():
     def compute_role(user_data):
         if user_data is None:
             return None
-        plan_id = compute_plan_id(user_data['supportTransactions'], plan_fee_lookup, datetime.datetime.now(datetime.timezone.min), config.auto_role_update.leeway_days)
+        if user_data.get('supportingPlan'):
+            plan_id = user_data['supportingPlan']['id']
+        else:
+            plan_id = compute_plan_id(user_data['supportTransactions'], plan_fee_lookup, datetime.datetime.now(datetime.timezone.utc), config.auto_role_update.leeway_days)
         return config.plan_roles.get(plan_id)
 
     async def get_fanbox_user_data(pixiv_id, member=None, force_update=False):
@@ -300,26 +317,20 @@ async def main():
             user_data = await fanbox_client.get_user(pixiv_id)
         await update_user_data_db(db, pixiv_id, user_data)
         return user_data
-    
-    async def get_all_fanbox_users():
-        all_users = await fanbox_client.get_all_users()
-        return {int(user['user']['userId']): user['planId'] for user in all_users}
 
     async def set_member_role(member, role):
         if member is None:
             return False
         if role is None:
-            if has_role(member, config.all_roles):
-                await member.remove_roles(*config.all_roles)
-                return True
-            return False
+            await member.remove_roles(*config.all_roles)
+            return True
         elif not has_role(member, [role]):
             await member.remove_roles(*config.all_roles)
             await member.add_roles(role)
             return True
         return False
 
-    async def update_role_check_by_txn(member:discord.Member):
+    async def update_role_check(member: discord.Member):
         if not has_role(member, config.all_roles):
             return
         pixiv_id = await get_member_pixiv_id_db(db, member.id)
@@ -328,55 +339,21 @@ async def main():
         if await set_member_role(member, role):
             logging.info(f'Set role: member: {member} pixiv_id: {pixiv_id} role: {role}')
 
-    async def update_role_check_all_members_by_txn():
-        guild = client.guilds[0]
-        logging.info(f'Begin update role check: {guild.member_count} members')
-        count = 0
-        async for member in guild.fetch_members(limit=None):
-            try:
-                await update_role_check_by_txn(member)
-                count += 1
-            except Exception as ex:
-                logging.exception(ex)
-        logging.info(f'End update role check: {count} checked')
-
-    async def update_role_check_by_list(member:discord.Member, supporters):
-        pixiv_id = await get_member_pixiv_id_db(db, member.id)
-        if pixiv_id is None:
-            return
-        plan_id = supporters.get(pixiv_id)
-        role = config.plan_roles.get(plan_id)
-        if await set_member_role(member, role):
-            logging.info(f'Set role: member: {member} pixiv_id: {pixiv_id} role: {role}')
-
-    async def update_role_check_all_members_by_list():
-        guild = client.guilds[0]
-        logging.info(f'Begin update role check: {guild.member_count} members')
-        count = 0
-        all_fanbox_users = await get_all_fanbox_users()
-        async for member in guild.fetch_members(limit=None):
-            try:
-                await update_role_check_by_list(member, all_fanbox_users)
-                count += 1
-            except Exception as ex:
-                logging.exception(ex)
-        logging.info(f'End update role check: {count} checked')
-
     async def update_role_check_all_members():
-        if config.only_check_current_sub:
-            await update_role_check_all_members_by_list()
-        else:
-            await update_role_check_all_members_by_txn()
+        guild = client.guilds[0]
+        logging.info(f'Begin update role check: {guild.member_count} members')
+        count = 0
+        async for member in guild.fetch_members(limit=None):
+            try:
+                await update_role_check(member)
+                count += 1
+            except Exception as ex:
+                logging.exception(ex)
+        logging.info(f'End update role check: {count} checked')
 
     async def get_fanbox_role_with_pixiv_id(pixiv_id):
         user_data = await get_fanbox_user_data(pixiv_id, force_update=True)
-        if config.only_check_current_sub:
-            plan = user_data['supportingPlan']
-            if plan is None:
-                return None
-            return config.plan_roles.get(plan['id'])
-        else:
-            return compute_role(user_data)
+        return compute_role(user_data)
 
     async def reset():
         guild = client.guilds[0]
@@ -585,7 +562,7 @@ async def db_migration():
     print('Found registry.dat: Starting DB migration')
     with open('registry.dat', 'rb') as f:
         reg = pickle.load(f)
-    config = load_config(main.config_file)
+    config = load_config(config_file)
     client = FanboxClient(config.session_cookies, config.session_headers)
     db = await open_database()
     for discord_id, pixiv_ids in reg['discord_ids'].items():
