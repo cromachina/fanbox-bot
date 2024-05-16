@@ -17,7 +17,7 @@ from discord.ext import commands
 
 config_file = 'config.yml'
 registry_db = 'registry.db'
-fanbox_id_prog = re.compile('(\\d+)')
+fanbox_id_prog = re.compile(r'(\d+)')
 periodic_tasks = {}
 
 class obj:
@@ -41,7 +41,7 @@ def periodic(func, timeout):
         periodic_tasks[func] = task
         return task
 
-class RateLimiter():
+class RateLimiter:
     def __init__(self, rate_limit_seconds):
         self.limit_lock = asyncio.Lock()
         self.rate_limit = rate_limit_seconds
@@ -55,7 +55,7 @@ class RateLimiter():
             return result
 
 class FanboxClient:
-    def __init__(self, cookies, headers) -> None:
+    def __init__(self, cookies, headers):
         self.rate_limiter = RateLimiter(5)
         self.self_id = cookies['FANBOXSESSID'].split('_')[0]
         self.client = httpx.AsyncClient(base_url='https://api.fanbox.cc/', cookies=cookies, headers=headers)
@@ -204,9 +204,9 @@ async def open_database():
     return db
 
 async def reset_bindings_db(db):
-    db.execute('delete from member_pixiv')
-    db.execute('vacuum')
-    db.commit()
+    await db.execute('delete from member_pixiv')
+    await db.execute('vacuum')
+    await db.commit()
 
 async def get_user_data_db(db, pixiv_id):
     cursor = await db.execute('select data from user_data where pixiv_id = ?', (pixiv_id,))
@@ -247,14 +247,14 @@ async def get_plan_fees_db(db):
     return {r[0]:r[1] for r in result}
 
 async def update_plan_fees_db(db, plan_fees):
-    for k,v in plan_fees.items():
+    for k, v in plan_fees.items():
         await db.execute('replace into plan_fee values(?, ?)', (k, v))
     await db.commit()
 
 async def get_plan_fee_lookup(fanbox_client, db):
     cached_plans = await get_plan_fees_db(db)
     latest_plans = await fanbox_client.get_plans()
-    latest_plans = {plan['fee']:plan['id'] for plan in latest_plans}
+    latest_plans = {plan['fee']: plan['id'] for plan in latest_plans}
     latest_plans = cached_plans | latest_plans
     await update_plan_fees_db(db, latest_plans)
     return latest_plans
@@ -273,7 +273,7 @@ async def main():
     rate_limit_table = {}
     intents = discord.Intents.default()
     intents.members = True
-    client = commands.bot.Bot(command_prefix='!', intents=intents)
+    client = commands.Bot(command_prefix='!', intents=intents)
     fanbox_client = FanboxClient(config.session_cookies, config.session_headers)
     plan_fee_lookup = None
     db = None
