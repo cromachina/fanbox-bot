@@ -34,6 +34,10 @@ strict_access: False
 # This is "less fair" access than the transactions method, and the user must be subscribed when submitting for access.
 only_check_current_sub: False
 
+# Check transactions only from the current month (and the previous month if the current date is within `leeway_days`
+# of the beginning of the current month). This only applies when `only_check_current_sub` is False.
+only_check_recent_txns: False
+
 # Periodic cleanup routines. Only runs after user activity
 cleanup:
   # If we should even run cleanup routines at all

@@ -146,7 +146,7 @@ def compress_transactions(txns):
     return new_txns
 
 def compute_last_subscription_range(txns):
-    stop_date = datetime.datetime.min.replace(tzinfo=datetime.timezone.min)
+    stop_date = datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
     txn_range = []
     for txn in reversed(txns):
         date = txn['date']
@@ -159,31 +159,54 @@ def compute_last_subscription_range(txns):
         txn_range.append(txn)
     return txn_range, stop_date
 
-def compute_plan_id(txns, plan_fee_lookup, current_date, leeway_days):
+# Alternate behavior for limiting transaction search scope to the current month or last month
+# if within the leeway period for the beginning of the month.
+def compute_limited_txn_range(txn_range, current_date, leeway_days):
+    current_month_start = current_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    leeway_date = current_month_start + datetime.timedelta(days=leeway_days)
+
+    if current_date <= leeway_date:
+        start_date = (current_month_start - datetime.timedelta(days=1)).replace(day=1)
+        logging.debug(f'Checking transactions in last month or current month: {txn_range}')
+    else:
+        start_date = current_month_start
+        logging.debug(f'Checking transactions only in current month: {txn_range}')
+    return [txn for txn in txn_range if start_date <= txn['date'] <= current_date]
+
+def compute_plan_id(txns, plan_fee_lookup, current_date, leeway_days, limit_txn_range):
+    # Ensure current_date is in UTC
+    if current_date.tzinfo is None:
+        current_date = current_date.replace(tzinfo=datetime.timezone.utc)
     txns = compress_transactions(txns)
     txn_range, stop_date = compute_last_subscription_range(txns)
     stop_date = stop_date + datetime.timedelta(days=abs(leeway_days))
-    if stop_date < current_date or len(txn_range) == 0:
+
+    if limit_txn_range:
+        txn_range = compute_limited_txn_range(txn_range, current_date, leeway_days)
+        if not txn_range:
+            logging.debug('No valid transactions found.')
+            return None
+    elif stop_date < current_date or not txn_range:
         return None
+
     # When there is only one choice, skip most of the calculation.
     fee_types = {txn['fee'] for txn in txn_range}
     if len(fee_types) == 1:
+        logging.debug(f'Single fee type found: {fee_types}')
         return plan_fee_lookup.get(fee_types.pop())
 
     # When there are multiple choices, fill out the time table.
-    # This could probably be made more efficient by using intervals, but that would
-    # be more a lot more complicated to implement.
-    days = [None] * abs(txn_range[0]['date'] - stop_date).days
+    days = [None] * abs((txn_range[0]['date'] - stop_date).days)
 
     start_date = txn_range[0]['date']
-    stop_idx = abs(start_date - current_date).days
+    stop_idx = abs((start_date - current_date).days)
 
     for fee in sorted(plan_fee_lookup.keys(), reverse=True):
         for txn in txn_range:
             if fee == txn['fee']:
-                day_idx = abs(start_date - txn['date']).days
+                day_idx = abs((start_date - txn['date']).days)
                 for _ in range(txn['deltatime'].days):
-                    while days[day_idx] != None:
+                    while days[day_idx] is not None:
                         day_idx += 1
                     days[day_idx] = fee
 
@@ -194,6 +217,7 @@ def compute_plan_id(txns, plan_fee_lookup, current_date, leeway_days):
     min_fee = min(fee_types)
     days = [min_fee if day is None else day for day in days]
 
+    logging.debug(f"Days array: {days}")
     return plan_fee_lookup.get(max(days))
 
 async def open_database():
@@ -287,7 +311,12 @@ async def main():
     def compute_role(user_data):
         if user_data is None:
             return None
-        plan_id = compute_plan_id(user_data['supportTransactions'], plan_fee_lookup, datetime.datetime.now(datetime.timezone.min), config.auto_role_update.leeway_days)
+        plan_id = compute_plan_id(
+            user_data['supportTransactions'],
+            plan_fee_lookup,
+            datetime.datetime.now(datetime.timezone.utc),
+            config.auto_role_update.leeway_days,
+            config.only_check_recent_txns)
         return config.plan_roles.get(plan_id)
 
     async def get_fanbox_user_data(pixiv_id, member=None, force_update=False):
