@@ -307,6 +307,12 @@ async def main():
             return await client.guilds[0].fetch_member(discord_id)
         except:
             return None
+        
+    def role_from_supporting_plan(user_data):
+        plan = user_data['supportingPlan']
+        if plan is None:
+            return None
+        return config.plan_roles.get(plan['id'])
 
     def compute_role(user_data):
         if user_data is None:
@@ -325,6 +331,7 @@ async def main():
         user_data = await get_user_data_db(db, pixiv_id)
         if not force_update:
             role = compute_role(user_data)
+        # Checks to determine if cached used data should be updated from Fanbox.
         if force_update or role is None or not has_role(member, [role]):
             user_data = await fanbox_client.get_user(pixiv_id)
         await update_user_data_db(db, pixiv_id, user_data)
@@ -354,6 +361,8 @@ async def main():
         pixiv_id = await get_member_pixiv_id_db(db, member.id)
         user_data = await get_fanbox_user_data(pixiv_id, member=member)
         role = compute_role(user_data)
+        if role is None:
+            role = role_from_supporting_plan(user_data)
         if await set_member_role(member, role):
             logging.info(f'Set role: member: {member} pixiv_id: {pixiv_id} role: {role}')
 
@@ -400,12 +409,12 @@ async def main():
     async def get_fanbox_role_with_pixiv_id(pixiv_id):
         user_data = await get_fanbox_user_data(pixiv_id, force_update=True)
         if config.only_check_current_sub:
-            plan = user_data['supportingPlan']
-            if plan is None:
-                return None
-            return config.plan_roles.get(plan['id'])
+            return role_from_supporting_plan(user_data)
         else:
-            return compute_role(user_data)
+            role = compute_role(user_data)
+            if role is None:
+                role = role_from_supporting_plan(user_data)
+            return role
 
     async def reset():
         guild = client.guilds[0]
