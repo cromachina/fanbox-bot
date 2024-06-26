@@ -65,6 +65,8 @@ class FanboxClient:
         response = await self.rate_limiter.limit(request)
         if response.status_code == 401:
             raise Exception('Fanbox API reports 401 Unauthorized. session_cookies in the config file has likely been invalidated and needs to be updated. Restart the bot after updating.')
+        if response.status_code == 403:
+            raise Exception('Fanbox API reports 403 Forbidden. Headers and cookies in the config file likely need to be updated. Restart the bot after updating.')
         if response.is_error:
             return None
         return json.loads(response.text)['body']
