@@ -3,6 +3,11 @@ This bot is used to automate access control for my Fanbox Discord server.
 
 The bot accesses the Fanbox API using your Fanbox session token. This is found in your browser cookies when accessing Fanbox.
 
+## Fanbox API Restriction
+As of 2024-06-26, it seems that Fanbox has increased security for their API, possibly to stop scrapers. You may find that you have had to enter a captcha on Fanbox recently, and if you were using the bot before, it's now broken. Changes to the cookies the API uses seem to be tied to your IP address, so using the bot from another IP address will cause Fanbox API to return "403 Forbidden". So far, the only way I've found to get around this issue is by using the bot on my local PC where I had updated my Fanbox session cookies. It may be possible to also use another computer within the same network to run the bot, as long as the external IP address is the same. Refer to the `config-template.yml` to see how the cookies and headers have been updated.
+
+If you had wanted to run the bot on an always-online VM, you might have to actually get a browser running on the VM and login to Fanbox from there to get the correct tokens.
+
 ## Access control
 The Discord user sends the bot their Pixiv ID number, which will grant appropriate access. You can simply tell the users to message their Pixiv profile link to the bot, for example `https://www.pixiv.net/users/11`, which will extract `11` and check that ID.
 
@@ -63,7 +68,8 @@ Admin commands are prefixed with `!`, for example `!reset`
         - The bot's role must be higher in the role settings than the roles of the users it is assigning new roles to, otherwise you may get a permission error when assigning roles.
     - ⚠ Only invite one instance of a running bot to one server. If you invite the bot instance to multiple servers, it will only work with the first server it can find, which might be randomly ordered.
         - If you need a bot to run in multiple servers, then run different instances of the bot out of different directories, with different bot tokens (you have to create a new Discord app).
-- The bot must be running continually to service random requests and run periodic functions. If you do not have a continually running computer, then I recommend renting a lightweight VM on a cloud service (Google Cloud, AWS, DigitalOcean, etc.) to host your bot instance.
+- The bot must be running continually to service random requests and run periodic functions. ~~If you do not have a continually running computer, then I recommend renting a lightweight VM on a cloud service (Google Cloud, AWS, DigitalOcean, etc.) to host your bot instance.~~
+- Because of Fanbox's restrictive API, it seems that it can now only be accessed from your current IP address. It might only be possible to run the bot from the same computer/network in which you have retrieved your Fanbox session cookies.
 - I recommend installing Docker to run the bot, to both mitigate build issues and have your bot start automatically if your computer or VM restarts.
   - For Windows: https://www.docker.com/products/docker-desktop/
   - If using a cloud VM, typically Debian or Ubuntu Linux: run `sudo apt update && sudo apt install docker`
