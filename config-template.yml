@@ -68,24 +68,25 @@ system_messages:
 # To access your cookies with Chrome: Go to your FANBOX page -> Ctrl+Shift+J -> Application -> Cookies -> https://www.fanbox.cc
 # All values filled in must be strings, so if it's a number, you must 'quote' it, like '12345'.
 # [SECURITY] The values here should be treated like secrets, because they allow the bot to act on your behalf on FANBOX.
+# You may need to pass a captcha in your browser before updating these!
 session_cookies:
-  p_ab_id_id: <P_AB_ID_ID>
+  cf_clearance: <CF_CLEARANCE>
   FANBOXSESSID: <FANBOX_SESSION_ID>
-  p_ab_id: '2'
-  p_ab_id_2: '5'
+  p_ab_d_id: <P_AB_D_ID>
+  p_ab_id_2: <P_AB_ID_2>
+  p_ab_id: <P_AB_ID>
+  privacy_policy_agreement: '7'
   privacy_policy_notification: '0'
-  privacy_policy_agreement: '3'
+  agreement_master_terms_of_use_202408: '1'
 
-# Do not change unless you know what you are doing. Needed to contact the FANBOX API.
+# Do not change unless you know what you are doing. Needed to contact the FANBOX API
 session_headers:
   accept: application/json, text/plain, */*
-  accept-language: en-US,en;q=0.9,ja;q=0.8
-  sec-ch-ua: '" Not;A Brand";v="99", "Google Chrome";v="91", "Chromium";v="91"'
-  sec-ch-ua-mobile: "?0"
+  accept-language: en-US,en;q=0.5
   sec-fetch-dest: empty
   sec-fetch-mode: cors
   sec-fetch-site: same-site
+  TE: trailers
   referer: https://www.fanbox.cc/
-  referrerPolicy: strict-origin-when-cross-origin
   origin: https://www.fanbox.cc
-  user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36
+  user-agent: Mozilla/5.0 (X11; Linux x86_64; rv:127.0) Gecko/20100101 Firefox/127.0
