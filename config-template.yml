@@ -71,7 +71,7 @@ system_messages:
 # You may need to pass a captcha in your browser before updating these!
 session_cookies:
   cf_clearance: <CF_CLEARANCE>
-  FANBOXSESSID: <FANBOX_SESSION_ID>
+  FANBOXSESSID: <FANBOXSESSID>
   p_ab_d_id: <P_AB_D_ID>
   p_ab_id_2: <P_AB_ID_2>
   p_ab_id: <P_AB_ID>
@@ -79,7 +79,7 @@ session_cookies:
   privacy_policy_notification: '0'
   agreement_master_terms_of_use_202408: '1'
 
-# Do not change unless you know what you are doing. Needed to contact the FANBOX API
+# Needed to contact the FANBOX API.
 session_headers:
   accept: application/json, text/plain, */*
   accept-language: en-US,en;q=0.5
@@ -89,4 +89,5 @@ session_headers:
   TE: trailers
   referer: https://www.fanbox.cc/
   origin: https://www.fanbox.cc
-  user-agent: Mozilla/5.0 (X11; Linux x86_64; rv:127.0) Gecko/20100101 Firefox/127.0
+  # Get this from the network tab in your browser. Pick a random request and look at the headers tab. `User-Agent` should be near the bottom.
+  user-agent: <USER-AGENT>

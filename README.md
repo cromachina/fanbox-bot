@@ -12,7 +12,10 @@ If you want to run the bot on an always-online VM, you can get the correct token
 - Go into your browser proxy settings, for example in Firefox: `Settings -> Network Settings -> Manual Proxy configuration`
 - Fill out `SOCKS Host` with `localhost` and `Port` with `9090`, and click `Ok`
 - Open a private tab, go to Fanbox and login.
-- Collect the cookies/tokens needed by `config.yml` (see below under `Install and configuration`)
+- Collect the cookies and headers needed by `config.yml` (see below under `Install and configuration`)
+  - Important cookies: `cf_clearance`, `FANBOXSESSID`
+    - The cookie `__cf_bm` might be needed, but omitting it for myself has not caused any issue.
+  - Important headers: `user-agent`
 - Close the private tab and revert your browser network settings (usually `Use System Proxy Settings`)
 - You can stop the SSH tunnel by pressing `ctrl + C`
 
