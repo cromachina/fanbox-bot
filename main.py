@@ -61,18 +61,20 @@ class FanboxClient:
         self.client = httpx.AsyncClient(base_url='https://api.fanbox.cc/', cookies=cookies, headers=headers)
         self.client = httpx_caching.CachingClient(self.client)
 
-    async def get_payload(self, request):
+    async def get_payload(self, request, ok_404=False):
         response = await self.rate_limiter.limit(request)
-        if response.status_code == 401:
-            raise Exception('Fanbox API reports 401 Unauthorized. session_cookies in the config file has likely been invalidated and needs to be updated. Restart the bot after updating.')
-        if response.status_code == 403:
-            raise Exception('Fanbox API reports 403 Forbidden. Headers and cookies in the config file likely need to be updated. Restart the bot after updating.')
-        if response.is_error:
-            return None
+        if response.status_code in [401, 403]:
+            raise Exception(f'Fanbox API reports {response.status_code} {response.reason_phrase}. session_cookies and headers in the config file has likely been invalidated and need to be updated. Restart the bot after updating.')
+        if response.status_code == 404:
+            if ok_404:
+                return None
+            else:
+                raise Exception(f'Fanbox API reports {response.status_code} {response.reason_phrase}. This is unexpected for this call.')
+        response.raise_for_status()
         return json.loads(response.text)['body']
 
     async def get_user(self, user_id):
-        return await self.get_payload(self.client.get('legacy/manage/supporter/user', params={'userId': user_id}))
+        return await self.get_payload(self.client.get('legacy/manage/supporter/user', params={'userId': user_id}), ok_404=True)
 
     async def get_plans(self):
         return await self.get_payload(self.client.get('plan.listCreator', params={'userId': self.self_id}))
@@ -311,6 +313,8 @@ async def main():
             return None
         
     def role_from_supporting_plan(user_data):
+        if user_data is None:
+            return None
         plan = user_data['supportingPlan']
         if plan is None:
             return None
