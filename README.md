@@ -4,7 +4,7 @@ This bot is used to automate access control for my Fanbox Discord server.
 The bot accesses the Fanbox API using your Fanbox session token. This is found in your browser cookies when accessing Fanbox.
 
 ## Fanbox API Restriction
-As of 2024-06-26, it seems that Fanbox has increased security for their API, possibly to stop scrapers. You may find that you have had to enter a captcha on Fanbox recently, and if you were using the bot before, it's now broken. Changes to the cookies the API uses seem to be tied to your IP address, so using the bot from another IP address will cause Fanbox API to return "403 Forbidden".
+As of 2024-06-26, it seems that Fanbox has increased security for their API, possibly to stop scrapers (by using Cloudflare). You may find that you have had to pass a captcha on Fanbox recently, and if you were using the bot before, it's now broken. Changes to the cookies the API uses seem to be tied to your IP address, so using the bot from another IP address will cause Fanbox API to return "403 Forbidden".
 
 If you want to run the bot on an always-online VM, you can get the correct tokens by using your VM as a proxy for your web browser like so:
 - Create an SSH tunnel to your VM server from the command line: `ssh -N -D 9090 myuser@my.server.ip.address` (replace `myuser` with your VM user name and `my.server.ip.address` with your VM's IP address).
@@ -14,8 +14,8 @@ If you want to run the bot on an always-online VM, you can get the correct token
 - Open a private tab, go to Fanbox and login.
 - Collect the cookies and headers needed by `config.yml` (see below under `Install and configuration`)
   - Important cookies: `cf_clearance`, `FANBOXSESSID`
-    - The cookie `__cf_bm` might be needed, but omitting it for myself has not caused any issue.
   - Important headers: `user-agent`
+    - If you update the browser that you retrieved the `user-agent` from, you'll likely have to update this again too!
 - Close the private tab and revert your browser network settings (usually `Use System Proxy Settings`)
 - You can stop the SSH tunnel by pressing `ctrl + C`
 

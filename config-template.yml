@@ -90,4 +90,5 @@ session_headers:
   referer: https://www.fanbox.cc/
   origin: https://www.fanbox.cc
   # Get this from the network tab in your browser. Pick a random request and look at the headers tab. `User-Agent` should be near the bottom.
+  # This will need to be updated every time your browser is updated.
   user-agent: <USER-AGENT>
