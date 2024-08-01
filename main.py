@@ -4,7 +4,7 @@ import datetime
 import itertools
 import json
 import logging
-import multiprocessing as mp
+import concurrent.futures
 import re
 import time
 
@@ -25,21 +25,18 @@ class obj:
         for k, v in d.items():
             setattr(self, k, v)
 
-def periodic(func, timeout):
-    async def run():
-        while True:
-            try:
-                await asyncio.wait_for(func(), timeout=timeout)
-            except asyncio.TimeoutError as ex:
-                logging.exception(ex)
-                continue
-            except Exception as ex:
-                logging.exception(ex)
-            await asyncio.sleep(timeout)
-    if periodic_tasks.get(func) is None:
-        task = asyncio.create_task(run())
-        periodic_tasks[func] = task
-        return task
+async def periodic(func, timeout):
+    while True:
+        try:
+            await asyncio.wait_for(func(), timeout=timeout)
+        except asyncio.TimeoutError as ex:
+            logging.exception(ex)
+            continue
+        except AuthException as ex:
+            raise ex
+        except Exception as ex:
+            logging.exception(ex)
+        await asyncio.sleep(timeout)
 
 class RateLimiter:
     def __init__(self, rate_limit_seconds):
@@ -54,6 +51,9 @@ class RateLimiter:
             self.last_time = time.time()
             return result
 
+class AuthException(Exception):
+    pass
+
 class FanboxClient:
     def __init__(self, cookies, headers):
         self.rate_limiter = RateLimiter(5)
@@ -64,12 +64,9 @@ class FanboxClient:
     async def get_payload(self, request, ok_404=False):
         response = await self.rate_limiter.limit(request)
         if response.status_code in [401, 403]:
-            raise Exception(f'Fanbox API reports {response.status_code} {response.reason_phrase}. session_cookies and headers in the config file has likely been invalidated and need to be updated. Restart the bot after updating.')
-        if response.status_code == 404:
-            if ok_404:
-                return None
-            else:
-                raise Exception(f'Fanbox API reports {response.status_code} {response.reason_phrase}. This is unexpected for this call.')
+            raise AuthException(f'Fanbox API reports {response.status_code} {response.reason_phrase}. session_cookies and headers in the config file has likely been invalidated and need to be updated. Restart the bot after updating.')
+        if response.status_code == 404 and ok_404:
+            return None
         response.raise_for_status()
         return json.loads(response.text)['body']
 
@@ -78,7 +75,7 @@ class FanboxClient:
 
     async def get_plans(self):
         return await self.get_payload(self.client.get('plan.listCreator', params={'userId': self.self_id}))
-    
+
     async def get_all_users(self):
         return await self.get_payload(self.client.get('relationship.listFans', params={'status': 'supporter'}))
 
@@ -305,13 +302,26 @@ async def main():
     fanbox_client = FanboxClient(config.session_cookies, config.session_headers)
     plan_fee_lookup = None
     db = None
+    pending_exception = None
+
+    async def stop_with_exception(ex):
+        nonlocal pending_exception
+        pending_exception = ex
+        logging.exception(ex)
+        for role in client.guilds[0].roles:
+            if role.id == config.admin_role_id.id:
+                for member in role.members:
+                    dm = await member.create_dm()
+                    await dm.send(f'{str(ex)} Unable to recover; Shutting down.')
+                break
+        await client.close()
 
     async def fetch_member(discord_id):
         try:
             return await client.guilds[0].fetch_member(discord_id)
         except:
             return None
-        
+
     def role_from_supporting_plan(user_data):
         if user_data is None:
             return None
@@ -342,7 +352,7 @@ async def main():
             user_data = await fanbox_client.get_user(pixiv_id)
         await update_user_data_db(db, pixiv_id, user_data)
         return user_data
-    
+
     async def get_all_fanbox_users():
         all_users = await fanbox_client.get_all_users()
         return {int(user['user']['userId']): user['planId'] for user in all_users}
@@ -380,6 +390,8 @@ async def main():
             try:
                 await update_role_check_by_txn(member)
                 count += 1
+            except AuthException as ex:
+                raise ex
             except Exception as ex:
                 logging.exception(ex)
         logging.info(f'End update role check: {count} checked')
@@ -402,6 +414,8 @@ async def main():
             try:
                 await update_role_check_by_list(member, all_fanbox_users)
                 count += 1
+            except AuthException as ex:
+                raise ex
             except Exception as ex:
                 logging.exception(ex)
         logging.info(f'End update role check: {count} checked')
@@ -566,12 +580,20 @@ async def main():
         if len(client.guilds) > 1:
             logging.warning('This bot has been invited to more than 1 server. The bot may not work correctly.')
         logging.info(f'{client.user} has connected to Discord!')
-        
-        if config.cleanup.run:
-            periodic(cleanup, config.cleanup.period_hours * 60 * 60)
 
-        if config.auto_role_update.run:
-            periodic(update_role_check_all_members, config.auto_role_update.period_hours * 60 * 60)
+        try:
+            nonlocal plan_fee_lookup
+            plan_fee_lookup = await get_plan_fee_lookup(fanbox_client, db)
+            check_plans()
+
+            async with asyncio.TaskGroup() as tg:
+                if config.cleanup.run:
+                    tg.create_task(periodic(cleanup, config.cleanup.period_hours * 60 * 60))
+
+                if config.auto_role_update.run:
+                    tg.create_task(periodic(update_role_check_all_members, config.auto_role_update.period_hours * 60 * 60))
+        except AuthException as ex:
+            await stop_with_exception(ex)
 
     @client.event
     async def on_message(message):
@@ -589,6 +611,9 @@ async def main():
             else:
                 await handle_access(message)
 
+        except AuthException as ex:
+            await respond(message, 'system_error')
+            await stop_with_exception(ex)
         except Exception as ex:
             logging.exception(ex)
             await respond(message, 'system_error')
@@ -605,15 +630,18 @@ async def main():
 
     try:
         db = await open_database()
-        plan_fee_lookup = await get_plan_fee_lookup(fanbox_client, db)
-        check_plans()
         token = config.operator_token if config.operator_mode else config.discord_token
         await client.start(token, reconnect=False)
     except Exception as ex:
         logging.exception(ex)
     finally:
-        await client.close()
+        if not client.is_closed():
+            await client.close()
         await db.close()
+
+    if pending_exception:
+        raise pending_exception
+
     delay = 10
     logging.warning(f'Disconnected: reconnecting in {delay}s')
     await asyncio.sleep(delay)
@@ -652,12 +680,17 @@ async def db_migration():
 if __name__ == '__main__':
     asyncio.run(db_migration())
 
-    while True:
-        # Because discord.py is not closing aiohttp clients correctly,
-        # the process has to be completely restarted to get into a good state.
-        # If disconnects are frequent, the periodic cleanup function may never run.
-        # A new discord client could be created, but then aiohttp sockets may leak,
-        # and eventually resources would be exhausted.
-        p = mp.Process(target=run_main, daemon=True)
-        p.start()
-        p.join()
+    with concurrent.futures.ProcessPoolExecutor(max_workers=1) as pool:
+        while True:
+            # Because discord.py is not closing aiohttp clients correctly,
+            # the process has to be completely restarted to get into a good state.
+            # If disconnects are frequent, the periodic cleanup function may never run.
+            # A new discord client could be created, but then aiohttp sockets may leak,
+            # and eventually resources would be exhausted.
+            try:
+                future = pool.submit(run_main)
+                future.result()
+            except AuthException as ex:
+                logging.critical("An unrecoverable exception occurred, waiting forever...")
+                while True:
+                    time.sleep(1000)
