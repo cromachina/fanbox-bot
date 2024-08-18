@@ -68,6 +68,7 @@ Admin commands are prefixed with `!`, for example `!reset`
 - `reset` removes all roles in your config from all users. Any other roles will be ignored. Unbinds all users.
 - `purge` manually runs the user purge. Any user with no roles will be kicked from the server.
 - `test-id PIXIV_ID` tests if a pixiv ID can obtain a role at this moment in time. I use this for debugging.
+- `export-csv` generates and sends you a CSV file containing user Discord IDs, Pixiv IDs and join dates.
 
 ## Install and configuration
 - Create a Discord app and bot:
