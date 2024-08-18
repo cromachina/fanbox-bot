@@ -1,6 +1,8 @@
 import asyncio
 import calendar
+import csv
 import datetime
+import io
 import itertools
 import json
 import logging
@@ -574,6 +576,28 @@ async def main():
     async def test_id(ctx, id):
         role = await get_fanbox_role_with_pixiv_id(id)
         await ctx.send(f'Role: {role}')
+
+    @client.command(name='export-csv')
+    async def export_csv(ctx):
+        try:
+            guild = client.guilds[0]
+            with io.StringIO() as fileobj:
+                writer = csv.writer(fileobj)
+                writer.writerow(['Discord User', 'Discord ID', 'Pixiv User', 'Pixiv ID', 'Discord Join Date', 'Fanbox Join Date'])
+                async for member in guild.fetch_members(limit=None):
+                    pixiv_id = await get_member_pixiv_id_db(db, member.id)
+                    if pixiv_id is None:
+                        continue
+                    user_data = await get_user_data_db(db, pixiv_id)
+                    oldest_txn = None
+                    if user_data['supportTransactions']:
+                        oldest_txn = user_data['supportTransactions'][-1]['transactionDatetime']
+                    writer.writerow([member.name, member.id, user_data['user']['name'], pixiv_id, member.joined_at, oldest_txn])
+                fileobj.seek(0)
+                await ctx.send(file=discord.File(fileobj, filename='export.csv'))
+        except Exception as ex:
+            logging.exception(ex)
+            await ctx.send(f'Exception: {ex}')
 
     @client.event
     async def on_ready():
