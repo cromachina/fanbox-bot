@@ -34,8 +34,8 @@ async def periodic(func, timeout):
         except asyncio.TimeoutError as ex:
             logging.exception(ex)
             continue
-        except AuthException as ex:
-            raise ex
+        except AuthException:
+            raise
         except Exception as ex:
             logging.exception(ex)
         await asyncio.sleep(timeout)
@@ -82,11 +82,7 @@ class FanboxClient:
         return await self.get_payload(self.client.get('relationship.listFans', params={'status': 'supporter'}))
 
 def map_dict(a, f):
-    b = {}
-    for kv in a.items():
-        k, v = f(*kv)
-        b[k] = v
-    return b
+    return dict(f(*kv) for kv in a.items())
 
 def make_roles_objects(plan_roles):
     return map_dict(plan_roles, lambda k, v: (str(k), discord.Object(int(v))))
@@ -616,7 +612,7 @@ async def main():
 
                 if config.auto_role_update.run:
                     tg.create_task(periodic(update_role_check_all_members, config.auto_role_update.period_hours * 60 * 60))
-        except AuthException as ex:
+        except* AuthException as ex:
             await stop_with_exception(ex)
 
     @client.event
