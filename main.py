@@ -710,7 +710,7 @@ if __name__ == '__main__':
             try:
                 future = pool.submit(run_main)
                 future.result()
-            except AuthException as ex:
+            except* AuthException as ex:
                 logging.critical("An unrecoverable exception occurred, waiting forever...")
                 while True:
                     time.sleep(1000)
