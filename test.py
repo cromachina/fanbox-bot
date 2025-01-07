@@ -12,6 +12,7 @@ def filter_future_dates(txns, current_date):
 test_plan_fee_lookup = {
     500: '1',
     1000: '2',
+    1500: '3',
 }
 
 test_txns = [
@@ -30,10 +31,16 @@ test_txns = [
         'transactionDatetime': '2024-03-15T00:00:00+09:00',
         'targetMonth': '2024-03',
     },
+    {
+        'paidAmount': 400,
+        'transactionDatetime': '2024-03-16T00:00:00+09:00',
+        'targetMonth': '2024-03',
+    },
 ]
 
-current_date = main.parse_date('2024-06-15T00:00:01+09:00')
+current_date = main.parse_date('2024-06-01T00:00:01+09:00')
 
 test_txns = filter_future_dates(test_txns, current_date)
 
 print(main.compute_plan_id(test_txns, test_plan_fee_lookup, current_date, 5, True))
+print(main.compute_highest_plan_id(test_txns, test_plan_fee_lookup))

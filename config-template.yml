@@ -30,6 +30,12 @@ plan_roles:
 # Disallow multiple users from using the same Pixiv ID.
 strict_access: False
 
+## The only_check* flags below are mutually exclusive. Only set one of them to True.
+
+# Check for the highest transaction ever to assign a role.
+# This mode will not work with auto_role_update.
+only_check_highest_txn: False
+
 # Check if the user is simply subscribed to a plan or not at this moment instead of using transaction records.
 # This is "less fair" access than the transactions method, and the user must be subscribed when submitting for access.
 only_check_current_sub: False
@@ -57,12 +63,17 @@ auto_role_update:
 
 # Messages to return to the user for each condition
 system_messages:
-  rate_limited: "Rate limited, please wait {rate_limit} seconds.\nレートが制限されていますので、{rate_limit}秒お待ちください。"
-  no_id_found: "Cannot detect a user ID in your message.\nメッセージ内のユーザーIDを検出できません。"
+  rate_limited: "Rate limited, please wait {rate_limit} seconds.
+  レートが制限されていますので、{rate_limit}秒お待ちください。"
+  no_id_found: "Cannot detect a user ID in your message.
+  メッセージ内のユーザーIDを検出できません。"
   access_denied: "Access denied for ID {id}.\nID{id}に対してアクセスが拒否されました。"
-  id_bound: "Access denied. ID {id} is already bound to another user. Please contact the admin for assistance.\nアクセスが拒否されました。ID{id}はすでに別のユーザーにバインドされています。管理者にお問い合わせください。"
-  access_granted: "Access granted. Please check the server for new channels!\nアクセスが許可されました。新しいチャンネルがないか、サーバーをチェックしてみてください！"
-  system_error: "An error has occurred! The admin has been notified to fix it.\nエラーが発生しました！管理者が修正するように通知されています。"
+  id_bound: "Access denied. ID {id} is already bound to another user. Please contact the admin for assistance.
+  アクセスが拒否されました。ID{id}はすでに別のユーザーにバインドされています。管理者にお問い合わせください。"
+  access_granted: "Access granted. Please check the server for new channels!
+  アクセスが許可されました。新しいチャンネルがないか、サーバーをチェックしてみてください！"
+  system_error: "An error has occurred! The admin has been notified to fix it.
+  エラーが発生しました！管理者が修正するように通知されています。"
 
 # Update these with cookies from your FANBOX page. These are needed to contact the FANBOX API.
 # To access your cookies with Chrome: Go to your FANBOX page -> Ctrl+Shift+J -> Application -> Cookies -> https://www.fanbox.cc

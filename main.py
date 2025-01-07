@@ -219,6 +219,14 @@ def compute_plan_id(txns, plan_fee_lookup, current_date, leeway_days, limit_txn_
     logging.debug(f"Days array: {days}")
     return plan_fee_lookup.get(max(days))
 
+def compute_highest_plan_id(txns, plan_fee_lookup):
+    txns = compress_transactions(txns)
+    if not txns:
+        return None
+    highest = max(txn['fee'] for txn in txns)
+    # Best effort: Get the nearest plan in case there were plan value changes.
+    return min(plan_fee_lookup.items(), key=lambda x: abs(highest - x[0]))[1]
+
 async def open_database():
     db = await aiosqlite.connect(registry_db)
     await db.execute('create table if not exists user_data (pixiv_id integer not null primary key, data text)')
@@ -331,12 +339,17 @@ async def main():
     def compute_role(user_data):
         if user_data is None:
             return None
-        plan_id = compute_plan_id(
-            user_data['supportTransactions'],
-            plan_fee_lookup,
-            datetime.datetime.now(datetime.timezone.utc),
-            config.auto_role_update.leeway_days,
-            config.only_check_recent_txns)
+        if config.only_check_highest_txn:
+            plan_id = compute_highest_plan_id(
+                user_data['supportTransactions'],
+                plan_fee_lookup)
+        else:
+            plan_id = compute_plan_id(
+                user_data['supportTransactions'],
+                plan_fee_lookup,
+                datetime.datetime.now(datetime.timezone.utc),
+                config.auto_role_update.leeway_days,
+                config.only_check_recent_txns)
         return config.plan_roles.get(plan_id)
 
     async def get_fanbox_user_data(pixiv_id, member=None, force_update=False):
