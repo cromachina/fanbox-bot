@@ -22,9 +22,15 @@ If you want to run the bot on an always-online VM, you can get the correct token
 ## Access control
 The Discord user sends the bot their Pixiv ID number, which will grant appropriate access. You can simply tell the users to message their Pixiv profile link to the bot, for example `https://www.pixiv.net/users/11`, which will extract `11` and check that ID.
 
+The `only_check*` flags are mutually exclusive. Only use one at a time, or none at all.
+
+When `only_check_highest_txn` is `True`, the highest transactions in a month that the user has ever had will be used to grant a role.
+
 When `only_check_current_sub` is `False`, the user's Pixiv ID is checked against their Fanbox transaction records. More details below in Auto Role Update.
 
 When `only_check_current_sub` is `True`, then the user's current subscription status is checked instead of their transaction records.
+
+When `only_check_recent_txns` is `True`, then transactions are only checked in the current month (plus some additional checks for the start of the month).
 
 When `strict_access` is `True`, the bot will disallow different Discord users from using the same Pixiv ID. When a user successfully authenticates, their Discord ID is "bound" to their Pixiv ID. Successfully authenticating again will update their Pixiv ID binding. The user can only be unbound by an admin command. Some users may have had to create new Discord accounts, therefore the you will have to manually resolve unbinding of their old account. See Admin commands below.
 
