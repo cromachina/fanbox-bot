@@ -1,4 +1,4 @@
-FROM python:3.12.1-alpine
+FROM python:3.12-alpine
 WORKDIR /app
 RUN apk update && apk add --no-cache git gcc musl-dev
 COPY requirements.txt .
