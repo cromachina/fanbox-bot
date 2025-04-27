@@ -1,3 +1,5 @@
+⚠️Due to unavoidable Cloudflare issues caused by directly using the Fanbox web API, and Fanbox soon releasing their own Discord integration which practically serves the same purpose as this bot, this repository will be archived.
+
 # Fanbox Discord Bot
 This bot is used to automate access control for my Fanbox Discord server.
 
